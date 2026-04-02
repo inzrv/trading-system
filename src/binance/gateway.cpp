@@ -1,23 +1,46 @@
 #include "gateway.h"
 
+#include <algorithm>
+#include <cctype>
+#include <format>
 #include <iostream>
+#include <utility>
 
 namespace binance
 {
-Gateway::Gateway(net::io_context& io_ctx,
+namespace
+{
+std::string to_lower(std::string s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return s;
+}
+} // namespace
+
+Gateway::Gateway(Config config,
+                 net::io_context& io_ctx,
                  ssl::context& ssl_ctx,
                  std::shared_ptr<IQueue> queue)
-    : m_io_ctx(io_ctx)
+    : m_config(std::move(config))
+    , m_io_ctx(io_ctx)
     , m_ssl_ctx(ssl_ctx)
     , m_queue(queue)
 {
+    const auto depth_stream_host = m_config.depth_stream_conf.host;
+    const auto depth_stream_port = std::to_string(m_config.depth_stream_conf.port);
+    const auto depth_stream_symbol = to_lower(symbol_to_string(m_config.symbol));
+    const auto depth_stream_interval = std::to_string(m_config.depth_stream_conf.interval.count());
+    const auto depth_stream_target = std::format("/ws/{}@depth@{}ms", depth_stream_symbol, depth_stream_interval);
+
     m_ws_source = std::make_unique<WsSource>(
         m_io_ctx,
         m_ssl_ctx,
         m_queue,
-        "stream.binance.com",
-        "9443",
-        "/ws/btcusdt@depth@100ms",
+        depth_stream_host,
+        depth_stream_port,
+        depth_stream_target,
         [this](beast::error_code ec, std::string_view where) {
             on_ws_error(ec, where);
         },
@@ -29,18 +52,25 @@ Gateway::Gateway(net::io_context& io_ctx,
         }
     );
 
+    const auto orderbook_host = m_config.orderbook_conf.host;
+    const auto orderbook_port = std::to_string(m_config.orderbook_conf.port);
+
     m_rest_client = std::make_unique<RestClient>(
         m_io_ctx,
         m_ssl_ctx,
-        "api.binance.com",
-        "443"
+        orderbook_host,
+        orderbook_port
     );
 }
 
 std::expected<std::string, GatewayError> Gateway::request_snapshot()
 {
     m_state = State::RECOVERING;
-    const auto res = m_rest_client->get("/api/v3/depth?symbol=BTCUSDT&limit=5000");
+    const auto orderbook_symbol = symbol_to_string(m_config.symbol);
+    const auto orderbook_limit = std::to_string(m_config.orderbook_conf.limit);
+
+    const auto target = std::format("/api/v3/depth?symbol={}&limit={}", orderbook_symbol, orderbook_limit);
+    const auto res = m_rest_client->get(target);
     if (!res) {
         m_state = State::FAILED;
         return std::unexpected(GatewayError::REQUEST_ERROR);

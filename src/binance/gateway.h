@@ -5,6 +5,7 @@
 
 #include "network/ws_source.h"
 #include "network/rest_client.h"
+#include "config.h"
 
 #include <memory>
 
@@ -14,9 +15,10 @@ namespace binance
 class Gateway : public IGateway
 {
 public:
-    explicit Gateway(net::io_context& io_ctx,
-                     ssl::context& ssl_ctx,
-                     std::shared_ptr<IQueue> queue);
+    Gateway(Config config,
+            net::io_context& io_ctx,
+            ssl::context& ssl_ctx,
+            std::shared_ptr<IQueue> queue);
 
     void start() override;
     void stop() override;
@@ -29,6 +31,7 @@ private:
     void on_ws_error(beast::error_code ec, std::string_view where);
 
 private:
+    Config m_config;
     net::io_context& m_io_ctx;
     ssl::context& m_ssl_ctx;
     std::shared_ptr<IQueue> m_queue;

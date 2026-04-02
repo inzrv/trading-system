@@ -13,7 +13,7 @@ namespace binance
 
 struct DepthStreamConfig
 {
-    void from_json(const boost::json::object& json);
+    bool from_json(const boost::json::object& json);
 
     std::string host;
     uint16_t port;
@@ -28,16 +28,21 @@ private:
 
 struct OrderbookConfig
 {
-    void from_json(const boost::json::object& json);
+    bool from_json(const boost::json::object& json);
 
     std::string host;
     uint16_t port;
-    uint32_t limit;
+    uint16_t limit;
 };
 
 struct Config final : public IConfig
 {
-    void from_json(const boost::json::object& json) override;
+    Market market() const noexcept override
+    {
+        return Market::BINANCE;
+    }
+
+    bool from_json(const boost::json::object& json) override;
 
     Symbol symbol;
     DepthStreamConfig depth_stream_conf;

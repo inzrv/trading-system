@@ -1,27 +1,29 @@
 #include "runtime.h"
-#include "binance/gateway.h"
-#include "binance/queue.h"
-#include "binance/decoder.h"
-#include "binance/sequencer.h"
-#include "binance/recovery_manager.h"
-#include "binance/orderbook.h"
 
 #include <iostream>
 #include <chrono>
+#include <stdexcept>
+#include <utility>
 
-Runtime::Runtime()
+Runtime::Runtime(IRuntimeFactory& factory)
     : m_io_ctx()
     , m_ssl_ctx(ssl::context::tls_client)
     , m_work_guard(net::make_work_guard(m_io_ctx))
-    , m_queue(std::make_shared<binance::Queue<10'000>>())
-    , m_gateway(std::make_unique<binance::Gateway>(m_io_ctx, m_ssl_ctx, m_queue))
-    , m_decoder(std::make_unique<binance::Decoder>())
-    , m_sequencer(std::make_unique<binance::Sequencer>())
-    , m_orderbook(std::make_unique<binance::Orderbook>())
-    , m_recovery_manager(std::make_unique<binance::RecoveryManager>(*m_gateway, *m_decoder, *m_sequencer, *m_orderbook))
 {
     m_ssl_ctx.set_default_verify_paths();
     m_ssl_ctx.set_verify_mode(ssl::verify_peer);
+
+    auto components = factory.create(m_io_ctx, m_ssl_ctx);
+    m_queue = std::move(components.queue);
+    m_gateway = std::move(components.gateway);
+    m_decoder = std::move(components.decoder);
+    m_sequencer = std::move(components.sequencer);
+    m_orderbook = std::move(components.orderbook);
+    m_recovery_manager = std::move(components.recovery_manager);
+
+    if (!m_queue || !m_gateway || !m_decoder || !m_sequencer || !m_orderbook || !m_recovery_manager) {
+        throw std::invalid_argument("runtime factory returned incomplete components");
+    }
 }
 
 Runtime::~Runtime()

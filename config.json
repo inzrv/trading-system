@@ -1,0 +1,14 @@
+{
+    "depthStream" : {
+        "host" : "stream.binance.com",
+        "port" : 9443,
+        "interval" : 100
+    },
+    "orderbook" : {
+        "host" : "api.binance.com",
+        "port" : 443,
+        "limit" : 5000
+    },
+    "market": "binance",
+    "symbol" : "BTCUSDT"
+}

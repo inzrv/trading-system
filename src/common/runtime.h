@@ -6,6 +6,7 @@
 #include "recovery_manager.h"
 #include "sequencer.h"
 #include "orderbook.h"
+#include "runtime_factory.h"
 
 #include <boost/asio.hpp>
 #include <boost/beast/ssl.hpp>
@@ -20,7 +21,7 @@ namespace ssl = net::ssl;
 class Runtime
 {
 public:
-    Runtime();
+    explicit Runtime(IRuntimeFactory& factory);
     ~Runtime();
 
     void run();
