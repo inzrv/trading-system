@@ -121,11 +121,6 @@ void RecoveryManager::buffer_update(SequencedBookUpdate update)
     m_buffer.push_back(std::move(update));
 }
 
-void RecoveryManager::on_sequence_error(SequencingError error, SequencedBookUpdate update) const
-{
-    log::warn("RecoveryManager", "sequence error: {} (last_update={})", static_cast<int>(error), update.last_update);
-}
-
 std::optional<size_t> RecoveryManager::find_first_applicable_update(uint64_t last_update_id) const
 {
     const auto next_update_id = last_update_id + 1;

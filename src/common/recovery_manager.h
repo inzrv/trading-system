@@ -23,7 +23,6 @@ public:
     virtual bool is_recovering() const = 0;
     virtual void buffer_update(SequencedBookUpdate update) = 0;
     virtual void on_decode_error(DecodingError error) const = 0;
-    virtual void on_sequence_error(SequencingError error, SequencedBookUpdate update) const = 0;
 
     [[nodiscard]] State state() const noexcept
     {

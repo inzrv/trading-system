@@ -46,7 +46,6 @@ void Runtime::run()
     const auto init_res = m_recovery_manager->begin_initialize();
     if (!init_res) {
         log::error("Runtime", "initialization failed: {}", static_cast<int>(init_res.error()));
-        [[maybe_unused]] const auto _ = init_res.error();
         stop();
         return;
     }
@@ -102,8 +101,18 @@ void Runtime::run_core_loop()
 
         const auto seq_res = m_sequencer->check(update);
         if (!seq_res) {
-            log::warn("Runtime", "sequencer error: {}", static_cast<int>(seq_res.error()));
-            m_recovery_manager->on_sequence_error(seq_res.error(), std::move(update));
+            const auto seq_error = seq_res.error();
+            log::warn("Runtime", "sequencer error: {}", static_cast<int>(seq_error));
+
+            if (seq_error == SequencingError::GAP_DETECTED) {
+                const auto init_res = m_recovery_manager->begin_initialize();
+                if (!init_res) {
+                    log::error("Runtime", "initialization failed: {}", static_cast<int>(init_res.error()));
+                    stop();
+                    return;
+                }
+            }
+
             continue;
         }
 

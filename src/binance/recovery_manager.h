@@ -19,7 +19,6 @@ public:
     bool is_recovering() const override;
     void buffer_update(SequencedBookUpdate update) override;
     void on_decode_error(DecodingError error) const override;
-    void on_sequence_error(SequencingError error, SequencedBookUpdate update) const override;
 
 private:
     std::optional<size_t> find_first_applicable_update(uint64_t last_update_id) const;
