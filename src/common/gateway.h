@@ -12,10 +12,7 @@ public:
     enum class State
     {
         STOPPED,
-        STARTING,
         RUNNING,
-        RECOVERING,
-        STOPPING,
         FAILED
     };
 

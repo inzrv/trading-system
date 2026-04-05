@@ -55,7 +55,6 @@ Gateway::Gateway(Config config,
 
 std::expected<std::string, GatewayError> Gateway::request_snapshot()
 {
-    m_state = State::RECOVERING;
     const auto orderbook_symbol = symbol_to_string(m_config.symbol);
     const auto orderbook_limit = std::to_string(m_config.orderbook_conf.limit);
 
@@ -74,7 +73,7 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
 
 void Gateway::start()
 {
-    if (m_state == State::RUNNING || m_state == State::STARTING) {
+    if (m_state == State::RUNNING) {
         return;
     }
 
@@ -84,7 +83,7 @@ void Gateway::start()
 
 void Gateway::stop()
 {
-    if (m_state == State::STOPPED || m_state == State::STOPPING) {
+    if (m_state == State::STOPPED) {
         return;
     }
 
@@ -107,15 +106,11 @@ void Gateway::on_ws_state(WsSource::State state)
             m_state = State::STOPPED;
             break;
         case WsSource::State::STARTING:
-            m_state = State::STARTING;
             break;
         case WsSource::State::RUNNING:
-            if (m_state != State::RECOVERING) {
-                m_state = State::RUNNING;
-            }
+            m_state = State::RUNNING;
             break;
         case WsSource::State::STOPPING:
-            m_state = State::STOPPING;
             break;
         case WsSource::State::FAILED:
             m_state = State::FAILED;
