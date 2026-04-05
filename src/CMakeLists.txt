@@ -15,6 +15,7 @@ target_link_libraries(trading_system
         Boost::boost
         OpenSSL::SSL
         OpenSSL::Crypto
+        spdlog::spdlog
 )
 
 if(APPLE)

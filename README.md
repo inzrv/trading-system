@@ -34,13 +34,6 @@ cmake --build build -j
 ./build/src/trading_system
 ```
 
-The application connects to public Binance endpoints:
-
-- WebSocket: `stream.binance.com:9443`
-- REST: `api.binance.com:443`
-
-The symbol is currently hardcoded to `BTCUSDT`.
-
 ## Data Flow
 
 1. `Gateway` receives WS data and pushes raw payloads into a queue.
@@ -50,42 +43,17 @@ The symbol is currently hardcoded to `BTCUSDT`.
 5. If the sequence is valid, `Orderbook` applies updates.
 6. If a gap is detected, `RecoveryManager` performs snapshot + buffered replay.
 
-## Project Structure
-
-```text
-src/
-  main.cpp
-  common/
-    runtime.*          # runtime lifecycle orchestration
-    *.h/*.cpp          # shared interfaces and core domain types
-  binance/
-    gateway.*          # WS + REST integration
-    decoder.*          # Binance payload parsing
-    sequencer.*        # sequence continuity checks
-    recovery_manager.* # recovery orchestration
-    orderbook.*        # local order book implementation
-    network/
-      ws_source.*      # WebSocket client
-      rest_client.*    # REST client
-  utils/
-    utils.*            # shared utility helpers
-```
 
 ## Current State and Limitations
 
 - This is an infrastructure prototype, without strategy or execution logic.
 - No persistence/journal or file-based replay yet.
-- No metrics, structured logging, or health checks.
+- No metrics, no health checks.
 - Recovery error handling is still minimal.
-- Supports a single instrument (`BTCUSDT`) and a single source (Binance).
-
-## Useful Docs
-
-- Architecture notes: `architecture.md`
+- Supports a single source (Binance).
 
 ## Next Improvements
 
-- Move symbol/endpoints/timeouts into configuration.
 - Add unit/integration tests for decoder/sequencer/recovery.
 - Add normalization into exchange-agnostic events.
-- Add journaling/replay and observability (metrics/logging).
+- Add journaling/replay and observability (metrics).

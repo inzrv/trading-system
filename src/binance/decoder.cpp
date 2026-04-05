@@ -1,5 +1,7 @@
 #include "decoder.h"
+
 #include "api.h"
+#include "common/log.h"
 #include "utils/utils.h"
 
 namespace binance
@@ -10,6 +12,7 @@ Decoder::decode_diff(std::string_view diff_payload) const
 {   
     const auto parse_to_json_res = parse_to_json(diff_payload);
     if (!parse_to_json_res) {
+        log::warn("Decoder", "failed to parse diff payload");
         return std::unexpected(DecodingError::PAYLOAD_PARSING_ERROR);
     }
 
@@ -79,6 +82,7 @@ Decoder::decode_snapshot(std::string_view snapshot_payload) const
 {
     const auto parse_to_json_res = parse_to_json(snapshot_payload);
     if (!parse_to_json_res) {
+        log::warn("Decoder", "failed to parse snapshot payload");
         return std::unexpected(DecodingError::PAYLOAD_PARSING_ERROR);
     }
 
@@ -132,11 +136,13 @@ Decoder::parse_levels(const boost::json::array& side_updates) const
 
     for (const auto& entry : side_updates) {
         if (!entry.is_array()) {
+            log::warn("Decoder", "invalid level payload: entry is not array");
             return std::unexpected(DecodingError::INVALID_PAYLOAD);
         }
 
         const auto& level = entry.as_array();
         if (level.size() != 2 || !level[0].is_string() || !level[1].is_string()) {
+            log::warn("Decoder", "invalid level payload: expected [price,quantity]");
             return std::unexpected(DecodingError::INVALID_PAYLOAD);
         }
 

@@ -1,5 +1,7 @@
 #include "ws_source.h"
 
+#include "common/log.h"
+
 #include <boost/asio/connect.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 
@@ -7,6 +9,18 @@
 
 namespace binance
 {
+
+std::string ws_source_state_to_string(WsSource::State state)
+{
+    switch (state) {
+        case WsSource::State::STOPPED: return "STOPPED";
+        case WsSource::State::STARTING: return "STARTING";
+        case WsSource::State::RUNNING: return "RUNNING";
+        case WsSource::State::STOPPING: return "STOPPING";
+        case WsSource::State::FAILED: return "FAILED";
+    }
+    return "UNKNOWN";
+}
 
 WsSource::WsSource(net::io_context& io_ctx,
                    ssl::context& ssl_ctx,
@@ -37,6 +51,7 @@ void WsSource::start()
         return;
     }
 
+    log::info("WsSource", "starting... host={} target={}", m_host, m_target);
     m_restart_requested = false;
     reset_stream();
     publish_state(State::STARTING);
@@ -45,6 +60,7 @@ void WsSource::start()
 
 void WsSource::stop()
 {
+    log::info("WsSource", "stopping...");
     m_restart_requested = false;
 
     if (m_state == State::STOPPED || m_state == State::STOPPING) {
@@ -57,6 +73,7 @@ void WsSource::stop()
 
 void WsSource::restart()
 {
+    log::info("WsSource", "restart requested");
     m_restart_requested = true;
 
     if (m_state == State::STOPPED || m_state == State::FAILED) {
@@ -123,10 +140,12 @@ void WsSource::do_close()
 void WsSource::on_resolve(beast::error_code ec, tcp::resolver::results_type results)
 {
     if (ec) {
+        log::error("WsSource", "resolve failed: {}", ec.message());
         fail(ec, "resolve");
         return;
     }
 
+    log::debug("WsSource", "resolved host");
     net::async_connect(
         beast::get_lowest_layer(*m_ws),
         results,
@@ -138,10 +157,12 @@ void WsSource::on_resolve(beast::error_code ec, tcp::resolver::results_type resu
 void WsSource::on_connect(beast::error_code ec)
 {
     if (ec) {
+        log::error("WsSource", "connect failed: {}", ec.message());
         fail(ec, "connect");
         return;
     }
 
+    log::debug("WsSource", "connected to host");
     m_ws->next_layer().async_handshake(
         ssl::stream_base::client,
         beast::bind_front_handler(&WsSource::on_ssl_handshake, this));
@@ -150,10 +171,12 @@ void WsSource::on_connect(beast::error_code ec)
 void WsSource::on_ssl_handshake(beast::error_code ec)
 {
     if (ec) {
+        log::error("WsSource", "SSL handshake failed: {}", ec.message());
         fail(ec, "ssl_handshake");
         return;
     }
 
+    log::debug("WsSource", "SSL handshake succeeded");
     m_ws->set_option(websocket::stream_base::timeout::suggested(beast::role_type::client));
     m_ws->set_option(websocket::stream_base::decorator(
         [](websocket::request_type& req) {
@@ -169,10 +192,12 @@ void WsSource::on_ssl_handshake(beast::error_code ec)
 void WsSource::on_ws_handshake(beast::error_code ec)
 {
     if (ec) {
+        log::error("WsSource", "websocket handshake failed: {}", ec.message());
         fail(ec, "ws_handshake");
         return;
     }
 
+    log::info("WsSource", "websocket handshake succeeded");
     publish_state(State::RUNNING);
     do_read();
 }
@@ -180,6 +205,7 @@ void WsSource::on_ws_handshake(beast::error_code ec)
 void WsSource::on_read(beast::error_code ec, std::size_t /*bytes*/)
 {
     if (ec) {
+        log::error("WsSource", "read failed: {}", ec.message());
         fail(ec, "read");
         return;
     }
@@ -199,9 +225,11 @@ void WsSource::on_close(beast::error_code ec)
     const bool close_failed = ec && ec != websocket::error::closed;
 
     if (close_failed) {
+        log::warn("WsSource", "close failed: {}", ec.message());
         publish_error(ec, "close");
         publish_state(State::FAILED);
     } else {
+        log::info("WsSource", "closed cleanly");
         publish_state(State::STOPPED);
     }
 
@@ -248,6 +276,7 @@ void WsSource::publish_state(State state)
 
 void WsSource::fail(beast::error_code ec, std::string_view where)
 {
+    log::error("WsSource", " failure at {}: {}", where, ec.message());
     publish_error(ec, where);
     publish_state(State::FAILED);
     reset_stream();

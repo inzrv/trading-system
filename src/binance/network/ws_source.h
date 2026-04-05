@@ -94,4 +94,5 @@ private:
     drop_handler_t m_on_drop;
 };
 
+std::string ws_source_state_to_string(WsSource::State state);
 } // namespace binance

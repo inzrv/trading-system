@@ -8,4 +8,5 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
 
+add_subdirectory(external/spdlog)
 add_subdirectory(src)

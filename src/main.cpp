@@ -1,25 +1,30 @@
-#include "common/runtime.h"
-#include "common/config.h"
 #include "binance/config.h"
 #include "binance/runtime_factory.h"
+#include "common/log.h"
+#include "common/runtime.h"
+#include "common/config.h"
 
 #include <fstream>
-#include <iostream>
 #include <iterator>
 #include <memory>
 #include <string>
 
 int main(int argc, char* argv[])
 {
+    trading_system::log::initialize();
+    log::info("Main", "trading system starting...");
+
     if (argc < 2) {
-        std::cerr << "usage: trading_system <config_path>\n";
+        log::error("Main", "usage: trading_system <config_path>");
         return 1;
     }
 
     const std::string config_path = argv[1];
+    log::debug("Main", "config path: {}", config_path);
+
     std::ifstream config_file(config_path, std::ios::binary);
     if (!config_file) {
-        std::cerr << "failed to open config file: " << config_path << '\n';
+        log::error("Main", "failed to open config file: {}", config_path);
         return 1;
     }
 
@@ -30,9 +35,11 @@ int main(int argc, char* argv[])
 
     const auto market = detect_market_from_config(config_payload);
     if (!market) {
-        std::cerr << "failed to parse config file market: " << config_path << '\n';
+        log::error("Main", "failed to parse config file market: {}", config_path);
         return 1;
     }
+
+    log::info("Main", "detected market: {}", market_to_string(*market));
 
     try {
         std::unique_ptr<IRuntimeFactory> factory;
@@ -40,21 +47,24 @@ int main(int argc, char* argv[])
         if (*market == Market::BINANCE) {
             binance::Config config;
             if (!config.from_string(config_payload)) {
-                std::cerr << "failed to parse config file: " << config_path << '\n';
+                log::error("Main", "failed to parse config file: {}", config_path);
                 return 1;
             }
 
+            log::debug("Main", "creating Binance runtime factory");
             factory = std::make_unique<binance::RuntimeFactory>(std::move(config));
         } else {
-            std::cerr << "unsupported market: " << market_to_string(*market) << '\n';
+            log::error("Main", "unsupported market: {}", market_to_string(*market));
             return 1;
         }
 
+        log::info("Main", "runtime factory created, starting runtime");
         Runtime runtime{*factory};
         runtime.run();
+        log::info("Main", "trading system finished successfully");
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "fatal: " << e.what() << '\n';
+        log::error("Main", "fatal error: {}", e.what());
         return 1;
     }
 }

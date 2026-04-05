@@ -1,22 +1,12 @@
 #include "gateway.h"
 
-#include <algorithm>
-#include <cctype>
-#include <format>
-#include <iostream>
-#include <utility>
+#include "common/log.h"
+#include "utils/utils.h"
 
 namespace binance
 {
 namespace
 {
-std::string to_lower(std::string s)
-{
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return s;
-}
 } // namespace
 
 Gateway::Gateway(Config config,
@@ -48,7 +38,7 @@ Gateway::Gateway(Config config,
             on_ws_state(state);
         },
         []() {
-            std::cerr << "[drop] queue overflow\n";
+            log::warn("Gateway", "drop queue overflow");
         }
     );
 
@@ -70,12 +60,15 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
     const auto orderbook_limit = std::to_string(m_config.orderbook_conf.limit);
 
     const auto target = std::format("/api/v3/depth?symbol={}&limit={}", orderbook_symbol, orderbook_limit);
+    log::debug("Gateway", "requesting snapshot... {}", target);
     const auto res = m_rest_client->get(target);
     if (!res) {
+        log::error("Gateway", "snapshot request failed for {}", target);
         m_state = State::FAILED;
         return std::unexpected(GatewayError::REQUEST_ERROR);
     }
 
+    log::debug("Gateway", "snapshot request succeeded");
     return *res;
 }
 
@@ -85,6 +78,7 @@ void Gateway::start()
         return;
     }
 
+    log::info("Gateway", "starting...");
     m_ws_source->start();
 }
 
@@ -94,17 +88,20 @@ void Gateway::stop()
         return;
     }
 
+    log::info("Gateway", "stopping...");
     m_ws_source->stop();
 }
 
 void Gateway::restart()
 {
+    log::info("Gateway", "restart requested");
     m_ws_source->restart();
 }
 
 void Gateway::on_ws_state(WsSource::State state)
 {
     std::lock_guard lock{m_state_mutex};
+    log::info("Gateway", "websocket state: {}", ws_source_state_to_string(state));
     switch (state) {
         case WsSource::State::STOPPED:
             m_state = State::STOPPED;
@@ -130,7 +127,7 @@ void Gateway::on_ws_state(WsSource::State state)
 
 void Gateway::on_ws_error(beast::error_code ec, std::string_view where)
 {
-    std::cerr << "[ws error] " << where << ": " << ec.message() << '\n';
+    log::error("Gateway", "websocket error: {} {}", where, ec.message());
     m_state = State::FAILED;
 }
 

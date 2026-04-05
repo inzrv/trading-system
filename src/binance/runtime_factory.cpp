@@ -6,6 +6,7 @@
 #include "queue.h"
 #include "recovery_manager.h"
 #include "sequencer.h"
+#include "common/log.h"
 
 #include <utility>
 
@@ -19,6 +20,7 @@ RuntimeFactory::RuntimeFactory(Config config)
 RuntimeComponents RuntimeFactory::create(boost::asio::io_context& io_ctx,
                                          boost::asio::ssl::context& ssl_ctx)
 {
+    log::info("RuntimeFactory", "creating components...");
     RuntimeComponents components;
     components.queue = std::make_shared<Queue<10'000>>();
     components.gateway = std::make_unique<Gateway>(m_config, io_ctx, ssl_ctx, components.queue);
@@ -28,6 +30,7 @@ RuntimeComponents RuntimeFactory::create(boost::asio::io_context& io_ctx,
     components.recovery_manager =
         std::make_unique<RecoveryManager>(*components.gateway, *components.decoder, *components.sequencer, *components.orderbook);
 
+    log::info("RuntimeFactory", "created all components");
     return components;
 }
 

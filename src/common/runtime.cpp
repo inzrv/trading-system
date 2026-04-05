@@ -1,6 +1,7 @@
 #include "runtime.h"
 
-#include <iostream>
+#include "common/log.h"
+
 #include <chrono>
 #include <stdexcept>
 #include <utility>
@@ -24,6 +25,8 @@ Runtime::Runtime(IRuntimeFactory& factory)
     if (!m_queue || !m_gateway || !m_decoder || !m_sequencer || !m_orderbook || !m_recovery_manager) {
         throw std::invalid_argument("runtime factory returned incomplete components");
     }
+
+    log::info("Runtime", "Runtime initialized with all components");
 }
 
 Runtime::~Runtime()
@@ -33,6 +36,7 @@ Runtime::~Runtime()
 
 void Runtime::run()
 {
+    log::info("Runtime", "starting...");
     m_running = true;
 
     m_io_thread = std::thread([this]() {
@@ -41,6 +45,7 @@ void Runtime::run()
 
     const auto init_res = m_recovery_manager->begin_initialize();
     if (!init_res) {
+        log::error("Runtime", "initialization failed: {}", static_cast<int>(init_res.error()));
         [[maybe_unused]] const auto _ = init_res.error();
         stop();
         return;
@@ -56,6 +61,7 @@ void Runtime::stop()
         return;
     }
 
+    log::info("Runtime", "stopping...");
     m_recovery_manager->stop();
     m_work_guard.reset();
     m_io_ctx.stop();
@@ -76,6 +82,7 @@ void Runtime::run_core_loop()
 
         const auto update_res = m_decoder->decode_diff(item->payload);
         if (!update_res) {
+            log::warn("Runtime", "failed to parse update: {}", static_cast<int>(update_res.error()));
             m_recovery_manager->on_decode_error(update_res.error());
             continue;
         }
@@ -86,6 +93,7 @@ void Runtime::run_core_loop()
             m_recovery_manager->buffer_update(std::move(update));
             const auto recover_res = m_recovery_manager->try_recover();
             if (!recover_res) {
+                log::error("Runtime", "recovery failed during runtime loop: {}", static_cast<int>(recover_res.error()));
                 stop();
                 return;
             }
@@ -94,10 +102,12 @@ void Runtime::run_core_loop()
 
         const auto seq_res = m_sequencer->check(update);
         if (!seq_res) {
+            log::warn("Runtime", "sequencer error: {}", static_cast<int>(seq_res.error()));
             m_recovery_manager->on_sequence_error(seq_res.error(), std::move(update));
             continue;
         }
 
         m_orderbook->apply(update);
+        log::debug("Runtime", "applied update last_update={}", update.last_update);
     }
 }

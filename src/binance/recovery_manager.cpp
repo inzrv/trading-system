@@ -1,6 +1,6 @@
 #include "recovery_manager.h"
 
-#include <thread>
+#include "common/log.h"
 
 namespace binance
 {
@@ -17,6 +17,7 @@ RecoveryManager::RecoveryManager(IGateway& gateway,
 
 std::expected<void, RecoveringError> RecoveryManager::begin_initialize()
 {
+    log::info("RecoveryManager", "begin initialize");
     m_state = State::RECOVERING;
 
     m_buffer.clear();
@@ -30,10 +31,12 @@ std::expected<void, RecoveringError> RecoveryManager::begin_initialize()
 
     const auto wait_res = m_gateway.wait_until_running(kGatewayStartTimeout);
     if (!wait_res) {
+        log::error("RecoveryManager", "failed to start gateway: {}", static_cast<int>(wait_res.error()));
         m_state = State::STOPPED;
         return std::unexpected(RecoveringError::GATEWAY_START_ERROR);
     }
 
+    log::info("RecoveryManager", "gateway started");
     return {};
 }
 
@@ -44,13 +47,16 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
     }
 
     if (!m_snapshot_requested) {
+        log::info("RecoveryManager", "requesting snapshot...");
         const auto snapshot_res = m_gateway.request_snapshot();
         if (!snapshot_res) {
+            log::error("RecoveryManager", "snapshot request failed during recovery");
             return std::unexpected(RecoveringError::SNAPSHOT_REQUEST_ERROR);
         }
 
         const auto decode_res = m_decoder.decode_snapshot(*snapshot_res);
         if (!decode_res) {
+            log::error("RecoveryManager", "snapshot parsing failed during recovery");
             return std::unexpected(RecoveringError::SNAPSHOT_PARSING_ERROR);
         }
 
@@ -64,9 +70,11 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
 
     const auto first_pos = find_first_applicable_update(m_snapshot->last_update_id);
     if (!first_pos) {
+        log::debug("RecoveryManager", "no applicable update found yet during recovery");
         return {};
     }
 
+    log::info("RecoveryManager", "applying buffered updates from pos {}", *first_pos);
     m_orderbook.reset();
     m_orderbook.initialize(*m_snapshot);
     m_sequencer.reset();
@@ -74,6 +82,7 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
 
     const auto applying_status = apply_updates_from(*first_pos);
     if (!applying_status) {
+        log::warn("RecoveryManager", "failed while applying buffered updates");
         return {};
     }
 
@@ -81,11 +90,13 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
     m_snapshot.reset();
     m_snapshot_requested = false;
     m_state = State::READY;
+    log::info("RecoveryManager", "recovered and ready");
     return {};
 }
 
 void RecoveryManager::stop()
 {
+    log::info("RecoveryManager", "stopping...");
     m_gateway.stop();
     m_buffer.clear();
     m_snapshot.reset();
@@ -100,16 +111,20 @@ bool RecoveryManager::is_recovering() const
     return m_state == State::RECOVERING;
 }
 
-void RecoveryManager::on_decode_error(DecodingError) const
-{}
+void RecoveryManager::on_decode_error(DecodingError error) const
+{
+    log::warn("RecoveryManager", "decode error: {}", static_cast<int>(error));
+}
 
 void RecoveryManager::buffer_update(SequencedBookUpdate update)
 {
     m_buffer.push_back(std::move(update));
 }
 
-void RecoveryManager::on_sequence_error(SequencingError, SequencedBookUpdate) const
-{}
+void RecoveryManager::on_sequence_error(SequencingError error, SequencedBookUpdate update) const
+{
+    log::warn("RecoveryManager", "sequence error: {} (last_update={})", static_cast<int>(error), update.last_update);
+}
 
 std::optional<size_t> RecoveryManager::find_first_applicable_update(uint64_t last_update_id) const
 {
