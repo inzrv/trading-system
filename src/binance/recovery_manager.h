@@ -33,7 +33,7 @@ private:
     std::optional<Snapshot> m_snapshot;
     bool m_snapshot_requested{false};
 
-    static constexpr std::chrono::seconds kGatewayStartTimeout{2};
+    static constexpr std::chrono::seconds kGatewayStartTimeout{10};
 };
 
 } // namespace binance

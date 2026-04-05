@@ -59,8 +59,14 @@ int main(int argc, char* argv[])
         }
 
         log::info("Main", "runtime factory created, starting runtime");
+
         Runtime runtime{*factory};
-        runtime.run();
+        const auto run_res = runtime.run();
+        if (!run_res) {
+            log::error("Main", "trading system finished with runtime error: {}", static_cast<int>(run_res.error()));
+            return 1;
+        }
+
         log::info("Main", "trading system finished successfully");
         return 0;
     } catch (const std::exception& e) {

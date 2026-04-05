@@ -8,6 +8,7 @@
 #include "config.h"
 
 #include <memory>
+#include <chrono>
 
 namespace binance
 {
@@ -40,5 +41,8 @@ private:
 
     mutable std::mutex m_state_mutex;
     std::condition_variable m_state_cv;
+
+    static constexpr int kSnapshotMaxAttempts{3};
+    static constexpr std::chrono::milliseconds kSnapshotBaseBackoff{200};
 };
 } // namespace binance

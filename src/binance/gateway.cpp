@@ -3,11 +3,10 @@
 #include "common/log.h"
 #include "utils/utils.h"
 
+#include <thread>
+
 namespace binance
 {
-namespace
-{
-} // namespace
 
 Gateway::Gateway(Config config,
                  net::io_context& io_ctx,
@@ -59,16 +58,29 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
     const auto orderbook_limit = std::to_string(m_config.orderbook_conf.limit);
 
     const auto target = std::format("/api/v3/depth?symbol={}&limit={}", orderbook_symbol, orderbook_limit);
-    log::debug("Gateway", "requesting snapshot... {}", target);
-    const auto res = m_rest_client->get(target);
-    if (!res) {
-        log::error("Gateway", "snapshot request failed for {}", target);
-        m_state = State::FAILED;
-        return std::unexpected(GatewayError::REQUEST_ERROR);
+    for (int attempt = 1; attempt <= kSnapshotMaxAttempts; ++attempt) {
+        log::debug("Gateway", "requesting snapshot... {} (attempt {}/{})", target, attempt, kSnapshotMaxAttempts);
+        const auto res = m_rest_client->get(target);
+        if (res) {
+            log::debug("Gateway", "snapshot request succeeded");
+            return *res;
+        }
+
+        if (attempt == kSnapshotMaxAttempts) {
+            break;
+        }
+
+        const auto backoff = kSnapshotBaseBackoff * (1 << (attempt - 1));
+        log::warn("Gateway",
+                  "snapshot request failed for {}, retrying in {} ms",
+                  target,
+                  backoff.count());
+        std::this_thread::sleep_for(backoff);
     }
 
-    log::debug("Gateway", "snapshot request succeeded");
-    return *res;
+    log::error("Gateway", "snapshot request failed for {} after {} attempts", target, kSnapshotMaxAttempts);
+    m_state = State::FAILED;
+    return std::unexpected(GatewayError::REQUEST_ERROR);
 }
 
 void Gateway::start()

@@ -12,6 +12,7 @@
 #include <boost/beast/ssl.hpp>
 
 #include <atomic>
+#include <expected>
 #include <memory>
 #include <thread>
 
@@ -24,11 +25,11 @@ public:
     explicit Runtime(IRuntimeFactory& factory);
     ~Runtime();
 
-    void run();
+    std::expected<void, RuntimeError> run();
     void stop();
 
 private:
-    void run_core_loop();
+    std::expected<void, RuntimeError> run_core_loop();
 
 private:
     net::io_context m_io_ctx;

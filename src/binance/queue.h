@@ -7,7 +7,7 @@
 namespace binance
 {
 
-template<std::size_t Capacity>
+template<size_t Capacity>
 class Queue : public IQueue
 {
 public:

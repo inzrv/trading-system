@@ -35,6 +35,7 @@ WsSource::WsSource(net::io_context& io_ctx,
     , m_ssl_ctx(ssl_ctx)
     , m_resolver(net::make_strand(io_ctx))
     , m_ws(std::make_unique<websocket::stream<beast::ssl_stream<tcp::socket>>>(net::make_strand(io_ctx), ssl_ctx))
+    , m_reconnect_timer(io_ctx)
     , m_queue(std::move(queue))
     , m_host(std::move(host))
     , m_port(std::move(port))
@@ -47,6 +48,7 @@ WsSource::WsSource(net::io_context& io_ctx,
 
 void WsSource::start()
 {
+    m_reconnect_timer.cancel();
     if (m_state == State::STARTING || m_state == State::RUNNING) {
         return;
     }
@@ -62,6 +64,7 @@ void WsSource::stop()
 {
     log::info("WsSource", "stopping...");
     m_restart_requested = false;
+    m_reconnect_timer.cancel();
 
     if (m_state == State::STOPPED || m_state == State::STOPPING) {
         return;
@@ -198,11 +201,12 @@ void WsSource::on_ws_handshake(beast::error_code ec)
     }
 
     log::info("WsSource", "websocket handshake succeeded");
+    m_reconnect_attempts = 0;
     publish_state(State::RUNNING);
     do_read();
 }
 
-void WsSource::on_read(beast::error_code ec, std::size_t /*bytes*/)
+void WsSource::on_read(beast::error_code ec, size_t /*bytes*/)
 {
     if (ec) {
         log::error("WsSource", "read failed: {}", ec.message());
@@ -228,6 +232,7 @@ void WsSource::on_close(beast::error_code ec)
         log::warn("WsSource", "close failed: {}", ec.message());
         publish_error(ec, "close");
         publish_state(State::FAILED);
+        schedule_reconnect("close_failed");
     } else {
         log::info("WsSource", "closed cleanly");
         publish_state(State::STOPPED);
@@ -280,11 +285,47 @@ void WsSource::fail(beast::error_code ec, std::string_view where)
     publish_error(ec, where);
     publish_state(State::FAILED);
     reset_stream();
+    schedule_reconnect(where);
+}
 
-    if (m_restart_requested) {
-        m_restart_requested = false;
-        start();
+void WsSource::schedule_reconnect(std::string_view reason)
+{
+    if (m_state == State::STOPPING || m_state == State::STOPPED) {
+        return;
     }
+
+    if (m_reconnect_attempts >= kMaxReconnectAttempts) {
+        log::error("WsSource",
+                   "auto-reconnect disabled after {} attempts (last reason: {})",
+                   m_reconnect_attempts,
+                   reason);
+        return;
+    }
+
+    const auto attempt = m_reconnect_attempts++;
+    const auto multiplier = static_cast<int64_t>(1ull << std::min<size_t>(attempt, 5));
+    const auto exp_delay = std::chrono::milliseconds{kReconnectBaseDelay.count() * multiplier};
+    const auto delay = std::min(exp_delay, kReconnectMaxDelay);
+
+    log::warn("WsSource",
+              "scheduling auto-reconnect attempt {}/{} in {} ms (reason: {})",
+              m_reconnect_attempts,
+              kMaxReconnectAttempts,
+              delay.count(),
+              reason);
+
+    m_reconnect_timer.expires_after(delay);
+    m_reconnect_timer.async_wait([this](beast::error_code ec) {
+        if (ec) {
+            return;
+        }
+
+        if (m_state == State::STOPPING || m_state == State::RUNNING) {
+            return;
+        }
+
+        start();
+    });
 }
 
 } // namespace binance

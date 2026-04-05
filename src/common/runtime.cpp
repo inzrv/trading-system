@@ -34,7 +34,7 @@ Runtime::~Runtime()
     stop();
 }
 
-void Runtime::run()
+std::expected<void, RuntimeError> Runtime::run()
 {
     log::info("Runtime", "starting...");
     m_running = true;
@@ -47,10 +47,10 @@ void Runtime::run()
     if (!init_res) {
         log::error("Runtime", "initialization failed: {}", static_cast<int>(init_res.error()));
         stop();
-        return;
+        return std::unexpected(RuntimeError::INITIALIZATION_ERROR);
     }
 
-    run_core_loop();
+    return run_core_loop();
 }
 
 void Runtime::stop()
@@ -70,7 +70,7 @@ void Runtime::stop()
     }
 }
 
-void Runtime::run_core_loop()
+std::expected<void, RuntimeError> Runtime::run_core_loop()
 {
     while (m_running) {
         auto item = m_queue->try_pop();
@@ -94,7 +94,7 @@ void Runtime::run_core_loop()
             if (!recover_res) {
                 log::error("Runtime", "recovery failed during runtime loop: {}", static_cast<int>(recover_res.error()));
                 stop();
-                return;
+                return std::unexpected(RuntimeError::RECOVERY_ERROR);
             }
             continue;
         }
@@ -109,7 +109,7 @@ void Runtime::run_core_loop()
                 if (!init_res) {
                     log::error("Runtime", "initialization failed: {}", static_cast<int>(init_res.error()));
                     stop();
-                    return;
+                    return std::unexpected(RuntimeError::INITIALIZATION_ERROR);
                 }
             }
 
@@ -119,4 +119,6 @@ void Runtime::run_core_loop()
         m_orderbook->apply(update);
         log::debug("Runtime", "applied update last_update={}", update.last_update);
     }
+
+    return {};
 }

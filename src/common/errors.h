@@ -26,3 +26,9 @@ enum class RecoveringError
     SNAPSHOT_PARSING_ERROR,
     UPDATE_APPLY_ERROR
 };
+
+enum class RuntimeError
+{
+    INITIALIZATION_ERROR,
+    RECOVERY_ERROR
+};
