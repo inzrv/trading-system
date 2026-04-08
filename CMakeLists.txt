@@ -7,6 +7,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
+include(CTest)
 
 add_subdirectory(external/spdlog)
 add_subdirectory(src)
+
+if(BUILD_TESTING)
+    add_subdirectory(external/googletest)
+    add_subdirectory(tests)
+endif()

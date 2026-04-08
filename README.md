@@ -20,18 +20,55 @@ The project consumes `depthUpdate` events from WebSocket, maintains a local orde
 - CMake >= 3.20
 - Boost (Asio/Beast/JSON)
 - OpenSSL
+- spdlog (git submodule)
+- GoogleTest/GoogleMock (git submodule, optional for tests)
 
-## Build
+## Clone and Init Submodules
+
+```bash
+git clone <repo-url>
+cd trading-system
+git submodule update --init --recursive
+```
+
+## Build (Default: With Tests)
 
 ```bash
 cmake -S . -B build
 cmake --build build -j
 ```
 
-## Run
+## Build (Without Tests)
 
 ```bash
-./build/src/trading_system
+cmake -S . -B build-no-tests -DBUILD_TESTING=OFF
+cmake --build build-no-tests -j
+```
+
+## Run Tests
+
+Recommended:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Direct run:
+
+```bash
+./build/tests/trading_system_tests
+```
+
+## Run Project With Config
+
+```bash
+./build/src/trading_system ./config.json
+```
+
+Or from the build without tests:
+
+```bash
+./build-no-tests/src/trading_system ./config.json
 ```
 
 ## Data Flow
@@ -49,7 +86,6 @@ cmake --build build -j
 - This is an infrastructure prototype, without strategy or execution logic.
 - No persistence/journal or file-based replay yet.
 - No metrics, no health checks.
-- Recovery error handling is still minimal.
 - Supports a single source (Binance).
 
 ## Next Improvements
