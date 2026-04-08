@@ -31,7 +31,7 @@ std::expected<void, RecoveringError> RecoveryManager::begin_initialize()
 
     const auto wait_res = m_gateway.wait_until_running(kGatewayStartTimeout);
     if (!wait_res) {
-        log::error("RecoveryManager", "failed to start gateway: {}", static_cast<int>(wait_res.error()));
+        log::error("RecoveryManager", "failed to start gateway: {}", error_to_string(wait_res.error()));
         m_state = State::STOPPED;
         return std::unexpected(RecoveringError::GATEWAY_START_ERROR);
     }
@@ -82,6 +82,10 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
 
     const auto applying_status = apply_updates_from(*first_pos);
     if (!applying_status) {
+        return std::unexpected(applying_status.error());
+    }
+
+    if (!*applying_status) {
         log::warn("RecoveryManager", "failed while applying buffered updates");
         return {};
     }
@@ -113,7 +117,7 @@ bool RecoveryManager::is_recovering() const
 
 void RecoveryManager::on_decode_error(DecodingError error) const
 {
-    log::warn("RecoveryManager", "decode error: {}", static_cast<int>(error));
+    log::warn("RecoveryManager", "decode error: {}", error_to_string(error));
 }
 
 void RecoveryManager::buffer_update(SequencedBookUpdate update)
@@ -140,12 +144,18 @@ std::optional<size_t> RecoveryManager::find_first_applicable_update(uint64_t las
     return std::nullopt;
 }
 
-bool RecoveryManager::apply_updates_from(size_t pos)
+std::expected<bool, RecoveringError> RecoveryManager::apply_updates_from(size_t pos)
 {
     for (size_t i = pos; i < m_buffer.size(); ++i) {
         const auto& update = m_buffer[i];
         if (!m_sequencer.check(update)) {
-            begin_initialize();
+            const auto init_res = begin_initialize();
+            if (!init_res) {
+                log::error("RecoveryManager", "re-initialization failed while applying buffered updates: {}",
+                           error_to_string(init_res.error()));
+                return std::unexpected(init_res.error());
+            }
+
             return false;
         }
 

@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
         Runtime runtime{*factory};
         const auto run_res = runtime.run();
         if (!run_res) {
-            log::error("Main", "trading system finished with runtime error: {}", static_cast<int>(run_res.error()));
+            log::error("Main", "trading system finished with runtime error: {}", error_to_string(run_res.error()));
             return 1;
         }
 

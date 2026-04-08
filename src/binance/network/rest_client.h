@@ -21,6 +21,7 @@ namespace binance
 
 enum class RestError
 {
+    UNKNOWN_ERROR,
     RESOLVE_ERROR,
     CONNECT_ERROR,
     SSL_HANDSHAKE_ERROR,
@@ -29,6 +30,22 @@ enum class RestError
     BAD_STATUS,
     SHUTDOWN_ERROR
 };
+
+inline std::string_view error_to_string(RestError error) noexcept
+{
+    switch (error) {
+        case RestError::UNKNOWN_ERROR: return "UNKNOWN_ERROR";
+        case RestError::RESOLVE_ERROR: return "RESOLVE_ERROR";
+        case RestError::CONNECT_ERROR: return "CONNECT_ERROR";
+        case RestError::SSL_HANDSHAKE_ERROR: return "SSL_HANDSHAKE_ERROR";
+        case RestError::HTTP_WRITE_ERROR: return "HTTP_WRITE_ERROR";
+        case RestError::HTTP_READ_ERROR: return "HTTP_READ_ERROR";
+        case RestError::BAD_STATUS: return "BAD_STATUS";
+        case RestError::SHUTDOWN_ERROR: return "SHUTDOWN_ERROR";
+    }
+
+    return "UNKNOWN_ERROR";
+}
 
 class RestClient
 {

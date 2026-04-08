@@ -56,6 +56,7 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
 {
     const auto orderbook_symbol = symbol_to_string(m_config.symbol);
     const auto orderbook_limit = std::to_string(m_config.orderbook_conf.limit);
+    auto last_error = RestError::UNKNOWN_ERROR;
 
     const auto target = std::format("/api/v3/depth?symbol={}&limit={}", orderbook_symbol, orderbook_limit);
     for (int attempt = 1; attempt <= kSnapshotMaxAttempts; ++attempt) {
@@ -65,6 +66,7 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
             log::debug("Gateway", "snapshot request succeeded");
             return *res;
         }
+        last_error = res.error();
 
         if (attempt == kSnapshotMaxAttempts) {
             break;
@@ -72,13 +74,18 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
 
         const auto backoff = kSnapshotBaseBackoff * (1 << (attempt - 1));
         log::warn("Gateway",
-                  "snapshot request failed for {}, retrying in {} ms",
+                  "snapshot request failed for {}: {}, retrying in {} ms",
                   target,
+                  error_to_string(res.error()),
                   backoff.count());
         std::this_thread::sleep_for(backoff);
     }
 
-    log::error("Gateway", "snapshot request failed for {} after {} attempts", target, kSnapshotMaxAttempts);
+    log::error("Gateway",
+               "snapshot request failed for {} after {} attempts: {}",
+               target,
+               kSnapshotMaxAttempts,
+               error_to_string(last_error));
     m_state = State::FAILED;
     return std::unexpected(GatewayError::REQUEST_ERROR);
 }

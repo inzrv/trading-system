@@ -22,7 +22,7 @@ public:
 
 private:
     std::optional<size_t> find_first_applicable_update(uint64_t last_update_id) const;
-    bool apply_updates_from(size_t pos);
+    std::expected<bool, RecoveringError> apply_updates_from(size_t pos);
 
 private:
     IGateway& m_gateway;

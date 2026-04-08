@@ -45,7 +45,7 @@ std::expected<void, RuntimeError> Runtime::run()
 
     const auto init_res = m_recovery_manager->begin_initialize();
     if (!init_res) {
-        log::error("Runtime", "initialization failed: {}", static_cast<int>(init_res.error()));
+        log::error("Runtime", "initialization failed: {}", error_to_string(init_res.error()));
         stop();
         return std::unexpected(RuntimeError::INITIALIZATION_ERROR);
     }
@@ -81,7 +81,7 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
 
         const auto update_res = m_decoder->decode_diff(item->payload);
         if (!update_res) {
-            log::warn("Runtime", "failed to parse update: {}", static_cast<int>(update_res.error()));
+            log::warn("Runtime", "failed to parse update: {}", error_to_string(update_res.error()));
             m_recovery_manager->on_decode_error(update_res.error());
             continue;
         }
@@ -92,7 +92,7 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
             m_recovery_manager->buffer_update(std::move(update));
             const auto recover_res = m_recovery_manager->try_recover();
             if (!recover_res) {
-                log::error("Runtime", "recovery failed during runtime loop: {}", static_cast<int>(recover_res.error()));
+                log::error("Runtime", "recovery failed during runtime loop: {}", error_to_string(recover_res.error()));
                 stop();
                 return std::unexpected(RuntimeError::RECOVERY_ERROR);
             }
@@ -102,12 +102,12 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
         const auto seq_res = m_sequencer->check(update);
         if (!seq_res) {
             const auto seq_error = seq_res.error();
-            log::warn("Runtime", "sequencer error: {}", static_cast<int>(seq_error));
+            log::warn("Runtime", "sequencer error: {}", error_to_string(seq_error));
 
             if (seq_error == SequencingError::GAP_DETECTED) {
                 const auto init_res = m_recovery_manager->begin_initialize();
                 if (!init_res) {
-                    log::error("Runtime", "initialization failed: {}", static_cast<int>(init_res.error()));
+                    log::error("Runtime", "initialization failed: {}", error_to_string(init_res.error()));
                     stop();
                     return std::unexpected(RuntimeError::INITIALIZATION_ERROR);
                 }
