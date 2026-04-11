@@ -151,6 +151,113 @@ TEST(RecoveryManagerTest, TryRecoverLoadsSnapshot)
     EXPECT_TRUE(recovery_manager.is_recovering());
 }
 
+TEST(RecoveryManagerTest, TryRecoverRequestsSnapshotOnce)
+{
+    MockGateway gateway;
+    MockDecoder decoder;
+    MockSequencer sequencer;
+    MockOrderbook orderbook;
+
+    EXPECT_CALL(orderbook, reset()).Times(1);
+    EXPECT_CALL(sequencer, reset()).Times(1);
+    EXPECT_CALL(gateway, start()).Times(1);
+    EXPECT_CALL(gateway, wait_until_running(_))
+        .WillOnce(Return(std::expected<void, GatewayError>{}));
+
+    EXPECT_CALL(gateway, request_snapshot())
+        .Times(1)
+        .WillOnce(Return(std::expected<std::string, GatewayError>{kValidBinanceSnapshot}));
+
+    EXPECT_CALL(decoder, decode_snapshot(std::string_view{kValidBinanceSnapshot}))
+        .Times(1)
+        .WillOnce(Return(std::expected<Snapshot, DecodingError>{make_snapshot()}));
+
+    EXPECT_CALL(orderbook, initialize(_)).Times(0);
+    EXPECT_CALL(orderbook, apply(_)).Times(0);
+    EXPECT_CALL(sequencer, initialize(_)).Times(0);
+    EXPECT_CALL(sequencer, check(_)).Times(0);
+
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+
+    ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
+
+    ASSERT_TRUE(recovery_manager.try_recover().has_value());
+    ASSERT_TRUE(recovery_manager.try_recover().has_value());
+
+    EXPECT_TRUE(recovery_manager.is_recovering());
+}
+
+TEST(RecoveryManagerTest, TryRecoverRequestFails)
+{
+    MockGateway gateway;
+    MockDecoder decoder;
+    MockSequencer sequencer;
+    MockOrderbook orderbook;
+
+    EXPECT_CALL(orderbook, reset()).Times(1);
+    EXPECT_CALL(sequencer, reset()).Times(1);
+    EXPECT_CALL(gateway, start()).Times(1);
+    EXPECT_CALL(gateway, wait_until_running(_))
+        .WillOnce(Return(std::expected<void, GatewayError>{}));
+
+    EXPECT_CALL(gateway, request_snapshot())
+        .Times(1)
+        .WillOnce(Return(std::unexpected(GatewayError::REQUEST_ERROR)));
+
+    EXPECT_CALL(decoder, decode_snapshot(_)).Times(0);
+    EXPECT_CALL(orderbook, initialize(_)).Times(0);
+    EXPECT_CALL(orderbook, apply(_)).Times(0);
+    EXPECT_CALL(sequencer, initialize(_)).Times(0);
+    EXPECT_CALL(sequencer, check(_)).Times(0);
+
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+
+    ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
+
+    const auto recover_res = recovery_manager.try_recover();
+
+    ASSERT_FALSE(recover_res.has_value());
+    EXPECT_EQ(recover_res.error(), RecoveringError::SNAPSHOT_REQUEST_ERROR);
+    EXPECT_TRUE(recovery_manager.is_recovering());
+}
+
+TEST(RecoveryManagerTest, TryRecoverParseFails)
+{
+    MockGateway gateway;
+    MockDecoder decoder;
+    MockSequencer sequencer;
+    MockOrderbook orderbook;
+
+    EXPECT_CALL(orderbook, reset()).Times(1);
+    EXPECT_CALL(sequencer, reset()).Times(1);
+    EXPECT_CALL(gateway, start()).Times(1);
+    EXPECT_CALL(gateway, wait_until_running(_))
+        .WillOnce(Return(std::expected<void, GatewayError>{}));
+
+    EXPECT_CALL(gateway, request_snapshot())
+        .Times(1)
+        .WillOnce(Return(std::expected<std::string, GatewayError>{kValidBinanceSnapshot}));
+
+    EXPECT_CALL(decoder, decode_snapshot(std::string_view{kValidBinanceSnapshot}))
+        .Times(1)
+        .WillOnce(Return(std::unexpected(DecodingError::INVALID_PAYLOAD)));
+
+    EXPECT_CALL(orderbook, initialize(_)).Times(0);
+    EXPECT_CALL(orderbook, apply(_)).Times(0);
+    EXPECT_CALL(sequencer, initialize(_)).Times(0);
+    EXPECT_CALL(sequencer, check(_)).Times(0);
+
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+
+    ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
+
+    const auto recover_res = recovery_manager.try_recover();
+
+    ASSERT_FALSE(recover_res.has_value());
+    EXPECT_EQ(recover_res.error(), RecoveringError::SNAPSHOT_PARSING_ERROR);
+    EXPECT_TRUE(recovery_manager.is_recovering());
+}
+
 TEST(RecoveryManagerTest, TryRecover)
 {
     MockGateway gateway;
@@ -193,6 +300,147 @@ TEST(RecoveryManagerTest, TryRecover)
 
     ASSERT_TRUE(recover_res.has_value());
     EXPECT_FALSE(recovery_manager.is_recovering());
+}
+
+TEST(RecoveryManagerTest, TryRecoverSkipsStaleUpdate)
+{
+    MockGateway gateway;
+    MockDecoder decoder;
+    MockSequencer sequencer;
+    MockOrderbook orderbook;
+    Snapshot snapshot = make_snapshot();
+    SequencedBookUpdate stale_update = make_update(90);
+    SequencedBookUpdate applicable_update = make_update();
+    const auto stale_matcher = AllOf(
+        Field(&SequencedBookUpdate::symbol, Symbol::BTCUSDT),
+        Field(&SequencedBookUpdate::first_update, stale_update.first_update),
+        Field(&SequencedBookUpdate::last_update, stale_update.last_update));
+    const auto applicable_matcher = AllOf(
+        Field(&SequencedBookUpdate::symbol, Symbol::BTCUSDT),
+        Field(&SequencedBookUpdate::first_update, applicable_update.first_update),
+        Field(&SequencedBookUpdate::last_update, applicable_update.last_update));
+
+    EXPECT_CALL(orderbook, reset()).Times(2);
+    EXPECT_CALL(sequencer, reset()).Times(2);
+    EXPECT_CALL(gateway, start()).Times(1);
+    EXPECT_CALL(gateway, wait_until_running(_))
+        .WillOnce(Return(std::expected<void, GatewayError>{}));
+
+    EXPECT_CALL(gateway, request_snapshot())
+        .Times(1)
+        .WillOnce(Return(std::expected<std::string, GatewayError>{kValidBinanceSnapshot}));
+
+    EXPECT_CALL(decoder, decode_snapshot(std::string_view{kValidBinanceSnapshot}))
+        .Times(1)
+        .WillOnce(Return(std::expected<Snapshot, DecodingError>{snapshot}));
+
+    EXPECT_CALL(orderbook, initialize(Field(&Snapshot::last_update_id, kLastUpdateId))).Times(1);
+    EXPECT_CALL(sequencer, initialize(kLastUpdateId)).Times(1);
+    EXPECT_CALL(sequencer, check(stale_matcher)).Times(0);
+    EXPECT_CALL(orderbook, apply(stale_matcher)).Times(0);
+    EXPECT_CALL(sequencer, check(applicable_matcher)).Times(1)
+        .WillOnce(Return(std::expected<void, SequencingError>{}));
+    EXPECT_CALL(orderbook, apply(applicable_matcher)).Times(1);
+
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+
+    ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
+
+    recovery_manager.buffer_update(stale_update);
+    recovery_manager.buffer_update(applicable_update);
+
+    const auto recover_res = recovery_manager.try_recover();
+
+    ASSERT_TRUE(recover_res.has_value());
+    EXPECT_FALSE(recovery_manager.is_recovering());
+}
+
+TEST(RecoveryManagerTest, TryRecoverReinitializes)
+{
+    MockGateway gateway;
+    MockDecoder decoder;
+    MockSequencer sequencer;
+    MockOrderbook orderbook;
+    Snapshot snapshot = make_snapshot();
+    SequencedBookUpdate first_update = make_update();
+    SequencedBookUpdate gap_update = make_update(104);
+    const auto first_matcher = AllOf(
+        Field(&SequencedBookUpdate::symbol, Symbol::BTCUSDT),
+        Field(&SequencedBookUpdate::first_update, first_update.first_update),
+        Field(&SequencedBookUpdate::last_update, first_update.last_update));
+    const auto gap_matcher = AllOf(
+        Field(&SequencedBookUpdate::symbol, Symbol::BTCUSDT),
+        Field(&SequencedBookUpdate::first_update, gap_update.first_update),
+        Field(&SequencedBookUpdate::last_update, gap_update.last_update));
+
+    EXPECT_CALL(orderbook, reset()).Times(3);
+    EXPECT_CALL(sequencer, reset()).Times(3);
+    EXPECT_CALL(gateway, start()).Times(2);
+    EXPECT_CALL(gateway, wait_until_running(_)).Times(2)
+        .WillRepeatedly(Return(std::expected<void, GatewayError>{}));
+
+    EXPECT_CALL(gateway, request_snapshot())
+        .Times(1)
+        .WillOnce(Return(std::expected<std::string, GatewayError>{kValidBinanceSnapshot}));
+
+    EXPECT_CALL(decoder, decode_snapshot(std::string_view{kValidBinanceSnapshot}))
+        .Times(1)
+        .WillOnce(Return(std::expected<Snapshot, DecodingError>{snapshot}));
+
+    EXPECT_CALL(orderbook, initialize(Field(&Snapshot::last_update_id, kLastUpdateId))).Times(1);
+    EXPECT_CALL(sequencer, initialize(kLastUpdateId)).Times(1);
+    EXPECT_CALL(sequencer, check(first_matcher)).Times(1)
+        .WillOnce(Return(std::expected<void, SequencingError>{}));
+    EXPECT_CALL(orderbook, apply(first_matcher)).Times(1);
+    EXPECT_CALL(sequencer, check(gap_matcher)).Times(1)
+        .WillOnce(Return(std::unexpected(SequencingError::GAP_DETECTED)));
+    EXPECT_CALL(orderbook, apply(gap_matcher)).Times(0);
+
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+
+    ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
+
+    recovery_manager.buffer_update(first_update);
+    recovery_manager.buffer_update(gap_update);
+
+    const auto recover_res = recovery_manager.try_recover();
+
+    ASSERT_TRUE(recover_res.has_value());
+    EXPECT_TRUE(recovery_manager.is_recovering());
+}
+
+TEST(RecoveryManagerTest, StopClearsState)
+{
+    MockGateway gateway;
+    MockDecoder decoder;
+    MockSequencer sequencer;
+    MockOrderbook orderbook;
+
+    EXPECT_CALL(orderbook, reset()).Times(2);
+    EXPECT_CALL(sequencer, reset()).Times(2);
+    EXPECT_CALL(gateway, start()).Times(1);
+    EXPECT_CALL(gateway, wait_until_running(_))
+        .WillOnce(Return(std::expected<void, GatewayError>{}));
+    EXPECT_CALL(gateway, stop()).Times(1);
+    EXPECT_CALL(gateway, request_snapshot()).Times(0);
+    EXPECT_CALL(decoder, decode_snapshot(_)).Times(0);
+    EXPECT_CALL(orderbook, initialize(_)).Times(0);
+    EXPECT_CALL(orderbook, apply(_)).Times(0);
+    EXPECT_CALL(sequencer, initialize(_)).Times(0);
+    EXPECT_CALL(sequencer, check(_)).Times(0);
+
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+
+    ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
+
+    recovery_manager.buffer_update(make_update());
+    recovery_manager.stop();
+
+    const auto recover_res = recovery_manager.try_recover();
+
+    ASSERT_TRUE(recover_res.has_value());
+    EXPECT_FALSE(recovery_manager.is_recovering());
+    EXPECT_EQ(recovery_manager.state(), IRecoveryManager::State::STOPPED);
 }
 
 } // namespace
