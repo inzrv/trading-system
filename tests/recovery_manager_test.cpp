@@ -31,7 +31,7 @@ Snapshot make_snapshot(uint64_t last_update_id = kLastUpdateId)
 SequencedBookUpdate make_update(uint64_t update_id = kLastUpdateId + 1)
 {
     return SequencedBookUpdate{
-        .event_time = {} /* some date and time */,
+        .event_time = {},
         .symbol = Symbol::BTCUSDT,
         .first_update = update_id,
         .last_update = update_id + 1,
