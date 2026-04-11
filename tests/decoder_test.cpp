@@ -105,6 +105,25 @@ TEST(DecoderTest, DecodeDiffInvalidLevel)
     EXPECT_EQ(res.error(), DecodingError::INVALID_PAYLOAD);
 }
 
+TEST(DecoderTest, DecodeDiffInvalidUpdateRange)
+{
+    const binance::Decoder decoder;
+    const std::string payload = R"({
+        "e":"depthUpdate",
+        "E":123456789,
+        "s":"BTCUSDT",
+        "U":102,
+        "u":101,
+        "b":[["100.10","1.25"]],
+        "a":[["100.20","2.50"]]
+    })";
+
+    const auto res = decoder.decode_diff(payload);
+
+    ASSERT_FALSE(res.has_value());
+    EXPECT_EQ(res.error(), DecodingError::INVALID_PAYLOAD);
+}
+
 TEST(DecoderTest, DecodeSnapshot)
 {
     const binance::Decoder decoder;

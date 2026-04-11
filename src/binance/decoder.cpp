@@ -55,6 +55,10 @@ Decoder::decode_diff(std::string_view diff_payload) const
         return std::unexpected(DecodingError::UNEXPECTED_VALUE);
     }
 
+    if (first_update->as_int64() > last_update->as_int64()) {
+        return std::unexpected(DecodingError::INVALID_PAYLOAD);
+    }
+
     auto bids_res = parse_levels(bids->as_array());
     if (!bids_res) {
         return std::unexpected(bids_res.error());
