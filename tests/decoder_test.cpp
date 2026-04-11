@@ -1,25 +1,10 @@
 #include <gtest/gtest.h>
 
+#include "test_helpers.h"
 #include "binance/decoder.h"
 
 namespace
 {
-
-const std::string kValidDiffPayload = R"({
-    "e":"depthUpdate",
-    "E":123456789,
-    "s":"BTCUSDT",
-    "U":101,
-    "u":102,
-    "b":[["100.10","1.25"]],
-    "a":[["100.20","2.50"]]
-})";
-
-const std::string kValidSnapshotPayload = R"({
-    "lastUpdateId":100,
-    "bids":[["100.10","1.25"]],
-    "asks":[["100.20","2.50"]]
-})";
 
 TEST(DecoderTest, DecodeDiff)
 {

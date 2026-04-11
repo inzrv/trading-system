@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+#include "test_helpers.h"
 #include "binance/recovery_manager.h"
 #include "common/gateway.h"
 #include "common/decoder.h"
@@ -14,31 +15,6 @@ using ::testing::Return;
 
 namespace
 {
-constexpr uint64_t kLastUpdateId = 100;
-
-const std::string kValidBinanceSnapshot =
-    R"({"lastUpdateId":100,"bids":[],"asks":[]})";
-
-Snapshot make_snapshot(uint64_t last_update_id = kLastUpdateId)
-{
-    return Snapshot{
-        .last_update_id = last_update_id,
-        .bids = {},
-        .asks = {},
-    };
-}
-
-SequencedBookUpdate make_update(uint64_t update_id = kLastUpdateId + 1)
-{
-    return SequencedBookUpdate{
-        .event_time = {},
-        .symbol = Symbol::BTCUSDT,
-        .first_update = update_id,
-        .last_update = update_id + 1,
-        .bids = {},
-        .asks = {}
-    };
-}
 
 class MockGateway : public IGateway
 {
@@ -132,7 +108,7 @@ TEST(RecoveryManagerTest, TryRecoverLoadsSnapshot)
 
     EXPECT_CALL(decoder, decode_snapshot(std::string_view{kValidBinanceSnapshot}))
         .Times(1)
-        .WillOnce(Return(std::expected<Snapshot, DecodingError>{make_snapshot()}));
+        .WillOnce(Return(std::expected<Snapshot, DecodingError>{make_snapshot(kLastUpdateId)}));
 
     // Recovery cannot continue yet because there is no buffered update that
     // covers snapshot.last_update_id + 1.
@@ -170,7 +146,7 @@ TEST(RecoveryManagerTest, TryRecoverRequestsSnapshotOnce)
 
     EXPECT_CALL(decoder, decode_snapshot(std::string_view{kValidBinanceSnapshot}))
         .Times(1)
-        .WillOnce(Return(std::expected<Snapshot, DecodingError>{make_snapshot()}));
+        .WillOnce(Return(std::expected<Snapshot, DecodingError>{make_snapshot(kLastUpdateId)}));
 
     EXPECT_CALL(orderbook, initialize(_)).Times(0);
     EXPECT_CALL(orderbook, apply(_)).Times(0);
@@ -264,8 +240,8 @@ TEST(RecoveryManagerTest, TryRecover)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
-    Snapshot snapshot = make_snapshot();
-    SequencedBookUpdate update = make_update();
+    Snapshot snapshot = make_snapshot(kLastUpdateId);
+    SequencedBookUpdate update = make_update(kLastUpdateId + 1, kLastUpdateId + 2);
     const auto update_matcher = AllOf(
         Field(&SequencedBookUpdate::symbol, Symbol::BTCUSDT),
         Field(&SequencedBookUpdate::first_update, update.first_update),
@@ -308,9 +284,9 @@ TEST(RecoveryManagerTest, TryRecoverSkipsStaleUpdate)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
-    Snapshot snapshot = make_snapshot();
-    SequencedBookUpdate stale_update = make_update(90);
-    SequencedBookUpdate applicable_update = make_update();
+    Snapshot snapshot = make_snapshot(kLastUpdateId);
+    SequencedBookUpdate stale_update = make_update(kLastUpdateId - 10, kLastUpdateId - 9);
+    SequencedBookUpdate applicable_update = make_update(kLastUpdateId + 1, kLastUpdateId + 2);
     const auto stale_matcher = AllOf(
         Field(&SequencedBookUpdate::symbol, Symbol::BTCUSDT),
         Field(&SequencedBookUpdate::first_update, stale_update.first_update),
@@ -361,9 +337,9 @@ TEST(RecoveryManagerTest, TryRecoverReinitializes)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
-    Snapshot snapshot = make_snapshot();
-    SequencedBookUpdate first_update = make_update();
-    SequencedBookUpdate gap_update = make_update(104);
+    Snapshot snapshot = make_snapshot(kLastUpdateId);
+    SequencedBookUpdate first_update = make_update(kLastUpdateId + 1, kLastUpdateId + 2);
+    SequencedBookUpdate gap_update = make_update(kLastUpdateId + 4, kLastUpdateId + 5);
     const auto first_matcher = AllOf(
         Field(&SequencedBookUpdate::symbol, Symbol::BTCUSDT),
         Field(&SequencedBookUpdate::first_update, first_update.first_update),
@@ -433,7 +409,7 @@ TEST(RecoveryManagerTest, StopClearsState)
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
-    recovery_manager.buffer_update(make_update());
+    recovery_manager.buffer_update(make_update(kLastUpdateId + 1, kLastUpdateId + 2));
     recovery_manager.stop();
 
     const auto recover_res = recovery_manager.try_recover();
