@@ -21,8 +21,14 @@ public:
     void on_decode_error(DecodingError error) const override;
 
 private:
+    enum class ApplyResult
+    {
+        APPLIED,
+        RESTART_REQUIRED
+    };
+
     std::optional<size_t> find_first_applicable_update(uint64_t last_update_id) const;
-    std::expected<bool, RecoveringError> apply_updates_from(size_t pos);
+    ApplyResult apply_updates_from(size_t pos);
 
 private:
     IGateway& m_gateway;

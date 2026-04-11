@@ -77,12 +77,14 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
     m_sequencer.initialize(m_snapshot->last_update_id);
 
     const auto applying_status = apply_updates_from(*first_pos);
-    if (!applying_status) {
-        return std::unexpected(applying_status.error());
-    }
-
-    if (!*applying_status) {
-        log::warn("RecoveryManager", "failed while applying buffered updates");
+    if (applying_status == ApplyResult::RESTART_REQUIRED) {
+        log::warn("RecoveryManager", "buffered replay detected a gap, restarting recovery");
+        const auto init_res = begin_initialize();
+        if (!init_res) {
+            log::error("RecoveryManager", "re-initialization failed after buffered replay gap: {}",
+                       error_to_string(init_res.error()));
+            return std::unexpected(init_res.error());
+        }
         return {};
     }
 
@@ -140,25 +142,18 @@ std::optional<size_t> RecoveryManager::find_first_applicable_update(uint64_t las
     return std::nullopt;
 }
 
-std::expected<bool, RecoveringError> RecoveryManager::apply_updates_from(size_t pos)
+RecoveryManager::ApplyResult RecoveryManager::apply_updates_from(size_t pos)
 {
     for (size_t i = pos; i < m_buffer.size(); ++i) {
         const auto& update = m_buffer[i];
         if (!m_sequencer.check(update)) {
-            const auto init_res = begin_initialize();
-            if (!init_res) {
-                log::error("RecoveryManager", "re-initialization failed while applying buffered updates: {}",
-                           error_to_string(init_res.error()));
-                return std::unexpected(init_res.error());
-            }
-
-            return false;
+            return ApplyResult::RESTART_REQUIRED;
         }
 
         m_orderbook.apply(update);
     }
 
-    return true;
+    return ApplyResult::APPLIED;
 }
 
 } // namespace binance
