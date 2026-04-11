@@ -64,10 +64,6 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
         m_snapshot_requested = true;
     }
 
-    if (!m_snapshot.has_value()) {
-        return {};
-    }
-
     const auto first_pos = find_first_applicable_update(m_snapshot->last_update_id);
     if (!first_pos) {
         log::debug("RecoveryManager", "no applicable update found yet during recovery");
