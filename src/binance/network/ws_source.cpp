@@ -4,6 +4,8 @@
 
 #include <boost/asio/connect.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 
 #include <utility>
 
@@ -166,6 +168,14 @@ void WsSource::on_connect(beast::error_code ec)
     }
 
     log::debug("WsSource", "connected to host");
+    if (!SSL_set_tlsext_host_name(m_ws->next_layer().native_handle(), m_host.c_str())) {
+        const auto ssl_error = static_cast<int>(::ERR_get_error());
+        beast::error_code sni_ec{ssl_error, net::error::get_ssl_category()};
+        log::error("WsSource", "failed to set SNI host={}: {}", m_host, sni_ec.message());
+        fail(sni_ec, "sni");
+        return;
+    }
+
     m_ws->next_layer().async_handshake(
         ssl::stream_base::client,
         beast::bind_front_handler(&WsSource::on_ssl_handshake, this));
@@ -186,8 +196,9 @@ void WsSource::on_ssl_handshake(beast::error_code ec)
             req.set(beast::http::field::user_agent, "binance-ws-source");
         }));
 
+    const std::string host_header = m_host + ":" + m_port;
     m_ws->async_handshake(
-        m_host,
+        host_header,
         m_target,
         beast::bind_front_handler(&WsSource::on_ws_handshake, this));
 }
