@@ -2,7 +2,6 @@
 
 #include "common/log.h"
 
-#include <chrono>
 #include <stdexcept>
 #include <utility>
 
@@ -73,13 +72,9 @@ void Runtime::stop()
 std::expected<void, RuntimeError> Runtime::run_core_loop()
 {
     while (m_running) {
-        auto item = m_queue->try_pop();
-        if (!item) {
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-            continue;
-        }
+        auto item = m_queue->wait_pop();
 
-        const auto update_res = m_decoder->decode_diff(item->payload);
+        const auto update_res = m_decoder->decode_diff(item.payload);
         if (!update_res) {
             log::warn("Runtime", "failed to parse update: {}", error_to_string(update_res.error()));
             m_recovery_manager->on_decode_error(update_res.error());

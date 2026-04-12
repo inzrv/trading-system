@@ -3,10 +3,10 @@
 #include "decoder.h"
 #include "gateway.h"
 #include "orderbook.h"
-#include "queue.h"
 #include "recovery_manager.h"
 #include "sequencer.h"
 #include "common/log.h"
+#include "common/queue.h"
 
 #include <utility>
 
