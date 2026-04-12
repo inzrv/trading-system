@@ -90,6 +90,6 @@ Or from the build without tests:
 
 ## Next Improvements
 
-- Add unit/integration tests for decoder/sequencer/recovery.
+- Add integration tests for the decoder/sequencer/recovery pipeline.
 - Add normalization into exchange-agnostic events.
 - Add journaling/replay and observability (metrics).
