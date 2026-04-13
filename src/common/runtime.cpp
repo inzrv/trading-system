@@ -1,5 +1,6 @@
 #include "runtime.h"
 
+#include "common/orderbook_validation.h"
 #include "common/log.h"
 
 #include <stdexcept>
@@ -54,11 +55,11 @@ std::expected<void, RuntimeError> Runtime::run()
 
 void Runtime::stop()
 {
-    const bool was_running = m_running.exchange(false);
-    if (!was_running) {
+    if (!m_running) {
         return;
     }
 
+    m_running = false;
     log::info("Runtime", "stopping...");
     m_recovery_manager->stop();
     m_work_guard.reset();
@@ -113,6 +114,11 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
 
         m_orderbook->apply(update);
         log::debug("Runtime", "applied update last_update={}", update.last_update);
+
+        const auto l1 = m_orderbook->l1();
+        if (!is_valid(l1)) {
+            log::warn("Runtime", "orderbook is invalid: bid_price={}, ask_price={}", l1.best_bid->price, l1.best_ask->price);
+        }
     }
 
     return {};

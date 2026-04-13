@@ -11,7 +11,6 @@
 #include <boost/asio.hpp>
 #include <boost/beast/ssl.hpp>
 
-#include <atomic>
 #include <expected>
 #include <memory>
 #include <thread>
@@ -36,7 +35,7 @@ private:
     ssl::context m_ssl_ctx;
     net::executor_work_guard<net::io_context::executor_type> m_work_guard;
     std::thread m_io_thread;
-    std::atomic_bool m_running{false};
+    bool m_running{false};
 
     std::shared_ptr<IQueue> m_queue;
     std::unique_ptr<IGateway> m_gateway;

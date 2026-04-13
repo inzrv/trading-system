@@ -2,6 +2,7 @@ add_executable(trading_system_tests
     recovery_manager_test.cpp
     decoder_test.cpp
     sequencer_test.cpp
+    orderbook_validation_test.cpp
     ${PROJECT_SOURCE_DIR}/src/binance/api.cpp
     ${PROJECT_SOURCE_DIR}/src/binance/decoder.cpp
     ${PROJECT_SOURCE_DIR}/src/binance/recovery_manager.cpp
