@@ -7,6 +7,7 @@
 #include "common/decoder.h"
 #include "common/sequencer.h"
 #include "common/orderbook.h"
+#include "metrics/registry.h"
 
 using ::testing::_;
 using ::testing::AllOf;
@@ -56,13 +57,14 @@ TEST(RecoveryManagerTest, BeginInitializeSuccess)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
 
     EXPECT_CALL(orderbook, reset());
     EXPECT_CALL(sequencer, reset());
     EXPECT_CALL(gateway, start());
     EXPECT_CALL(gateway, wait_until_running(_)).WillOnce(Return(std::expected<void, GatewayError>{}));
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
     const auto init_res = recovery_manager.begin_initialize();
 
     ASSERT_TRUE(init_res.has_value());
@@ -75,6 +77,7 @@ TEST(RecoveryManagerTest, BeginInitializeFails)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
 
     EXPECT_CALL(orderbook, reset());
     EXPECT_CALL(sequencer, reset());
@@ -82,7 +85,7 @@ TEST(RecoveryManagerTest, BeginInitializeFails)
     EXPECT_CALL(gateway, wait_until_running(_))
         .WillOnce(Return(std::unexpected(GatewayError::TIMEOUT)));
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
     const auto init_res = recovery_manager.begin_initialize();
 
     ASSERT_FALSE(init_res.has_value());
@@ -95,6 +98,7 @@ TEST(RecoveryManagerTest, TryRecoverLoadsSnapshot)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
@@ -117,7 +121,7 @@ TEST(RecoveryManagerTest, TryRecoverLoadsSnapshot)
     EXPECT_CALL(sequencer, initialize(_)).Times(0);
     EXPECT_CALL(sequencer, check(_)).Times(0);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
@@ -133,6 +137,7 @@ TEST(RecoveryManagerTest, TryRecoverRequestsSnapshotOnce)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
@@ -153,7 +158,7 @@ TEST(RecoveryManagerTest, TryRecoverRequestsSnapshotOnce)
     EXPECT_CALL(sequencer, initialize(_)).Times(0);
     EXPECT_CALL(sequencer, check(_)).Times(0);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
@@ -169,6 +174,7 @@ TEST(RecoveryManagerTest, TryRecoverRequestFails)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
@@ -186,7 +192,7 @@ TEST(RecoveryManagerTest, TryRecoverRequestFails)
     EXPECT_CALL(sequencer, initialize(_)).Times(0);
     EXPECT_CALL(sequencer, check(_)).Times(0);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
@@ -203,6 +209,7 @@ TEST(RecoveryManagerTest, TryRecoverParseFails)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
@@ -223,7 +230,7 @@ TEST(RecoveryManagerTest, TryRecoverParseFails)
     EXPECT_CALL(sequencer, initialize(_)).Times(0);
     EXPECT_CALL(sequencer, check(_)).Times(0);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
@@ -240,6 +247,7 @@ TEST(RecoveryManagerTest, TryRecover)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
     Snapshot snapshot = make_snapshot(kLastUpdateId);
     SequencedBookUpdate update = make_update(kLastUpdateId + 1, kLastUpdateId + 2);
     const auto update_matcher = AllOf(
@@ -266,7 +274,7 @@ TEST(RecoveryManagerTest, TryRecover)
     EXPECT_CALL(sequencer, initialize(kLastUpdateId)).Times(1);
     EXPECT_CALL(sequencer, check(update_matcher)).Times(1);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
@@ -284,6 +292,7 @@ TEST(RecoveryManagerTest, TryRecoverSkipsStaleUpdate)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
     Snapshot snapshot = make_snapshot(kLastUpdateId);
     SequencedBookUpdate stale_update = make_update(kLastUpdateId - 10, kLastUpdateId - 9);
     SequencedBookUpdate applicable_update = make_update(kLastUpdateId + 1, kLastUpdateId + 2);
@@ -318,7 +327,7 @@ TEST(RecoveryManagerTest, TryRecoverSkipsStaleUpdate)
         .WillOnce(Return(std::expected<void, SequencingError>{}));
     EXPECT_CALL(orderbook, apply(applicable_matcher)).Times(1);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
@@ -337,6 +346,7 @@ TEST(RecoveryManagerTest, TryRecoverReinitializes)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
     Snapshot snapshot = make_snapshot(kLastUpdateId);
     SequencedBookUpdate first_update = make_update(kLastUpdateId + 1, kLastUpdateId + 2);
     SequencedBookUpdate gap_update = make_update(kLastUpdateId + 4, kLastUpdateId + 5);
@@ -372,7 +382,7 @@ TEST(RecoveryManagerTest, TryRecoverReinitializes)
         .WillOnce(Return(std::unexpected(SequencingError::GAP_DETECTED)));
     EXPECT_CALL(orderbook, apply(gap_matcher)).Times(0);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 
@@ -391,6 +401,7 @@ TEST(RecoveryManagerTest, StopClearsState)
     MockDecoder decoder;
     MockSequencer sequencer;
     MockOrderbook orderbook;
+    metrics::Registry metrics;
 
     EXPECT_CALL(orderbook, reset()).Times(2);
     EXPECT_CALL(sequencer, reset()).Times(2);
@@ -405,7 +416,7 @@ TEST(RecoveryManagerTest, StopClearsState)
     EXPECT_CALL(sequencer, initialize(_)).Times(0);
     EXPECT_CALL(sequencer, check(_)).Times(0);
 
-    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook);
+    binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
 
     ASSERT_TRUE(recovery_manager.begin_initialize().has_value());
 

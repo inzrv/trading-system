@@ -30,6 +30,7 @@ WsSource::WsSource(net::io_context& io_ctx,
                    std::string host,
                    std::string port,
                    std::string target,
+                   metrics::Registry& metrics,
                    error_handler_t on_error,
                    state_handler_t on_state,
                    drop_handler_t on_drop)
@@ -39,6 +40,7 @@ WsSource::WsSource(net::io_context& io_ctx,
     , m_ws(std::make_unique<websocket::stream<beast::ssl_stream<tcp::socket>>>(net::make_strand(io_ctx), ssl_ctx))
     , m_reconnect_timer(io_ctx)
     , m_queue(std::move(queue))
+    , m_metrics(metrics)
     , m_host(std::move(host))
     , m_port(std::move(port))
     , m_target(std::move(target))
@@ -259,6 +261,8 @@ void WsSource::on_close(beast::error_code ec)
 
 void WsSource::publish_message(std::string payload)
 {
+    m_metrics.on_ws_message();
+
     if (!m_queue) {
         return;
     }
@@ -312,6 +316,8 @@ void WsSource::schedule_reconnect(std::string_view reason)
                    reason);
         return;
     }
+
+    m_metrics.on_ws_reconnect();
 
     const auto attempt = m_reconnect_attempts++;
     const auto multiplier = static_cast<int64_t>(1ull << std::min<size_t>(attempt, 5));

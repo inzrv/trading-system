@@ -6,6 +6,7 @@
 #include "network/ws_source.h"
 #include "network/rest_client.h"
 #include "config.h"
+#include "metrics/registry.h"
 
 #include <memory>
 #include <chrono>
@@ -19,7 +20,8 @@ public:
     Gateway(Config config,
             net::io_context& io_ctx,
             ssl::context& ssl_ctx,
-            std::shared_ptr<IQueue> queue);
+            std::shared_ptr<IQueue> queue,
+            metrics::Registry& metrics);
 
     void start() override;
     void stop() override;
@@ -36,6 +38,7 @@ private:
     net::io_context& m_io_ctx;
     ssl::context& m_ssl_ctx;
     std::shared_ptr<IQueue> m_queue;
+    metrics::Registry& m_metrics;
     std::unique_ptr<WsSource> m_ws_source;
     std::unique_ptr<RestClient> m_rest_client;
 

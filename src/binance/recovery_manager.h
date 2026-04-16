@@ -5,6 +5,7 @@
 #include "common/decoder.h"
 #include "common/sequencer.h"
 #include "common/orderbook.h"
+#include "metrics/registry.h"
 
 namespace binance
 {
@@ -12,7 +13,11 @@ namespace binance
 class RecoveryManager : public IRecoveryManager
 {
 public:
-    RecoveryManager(IGateway& gateway, IDecoder& decoder, ISequencer& sequencer, IOrderbook& orderbook);
+    RecoveryManager(IGateway& gateway,
+                    IDecoder& decoder,
+                    ISequencer& sequencer,
+                    IOrderbook& orderbook,
+                    metrics::Registry& metrics);
     std::expected<void, RecoveringError> begin_initialize() override;
     std::expected<void, RecoveringError> try_recover() override;
     void stop() override;
@@ -35,6 +40,7 @@ private:
     IDecoder& m_decoder;
     ISequencer& m_sequencer;
     IOrderbook& m_orderbook;
+    metrics::Registry& m_metrics;
     std::vector<SequencedBookUpdate> m_buffer;
     std::optional<Snapshot> m_snapshot;
     bool m_snapshot_requested{false};

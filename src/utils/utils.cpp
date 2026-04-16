@@ -20,3 +20,9 @@ std::string to_lower(std::string s)
     boost::algorithm::to_lower(s);
     return s;
 }
+
+int64_t now_unix_ms() noexcept
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}

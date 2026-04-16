@@ -22,13 +22,20 @@ RuntimeComponents RuntimeFactory::create(boost::asio::io_context& io_ctx,
 {
     log::info("RuntimeFactory", "creating components...");
     RuntimeComponents components;
-    components.queue = std::make_shared<Queue<10'000>>();
-    components.gateway = std::make_unique<Gateway>(m_config, io_ctx, ssl_ctx, components.queue);
+    components.metrics = std::make_unique<metrics::Registry>();
+    components.queue = std::make_shared<Queue<10'000>>(*components.metrics);
+    components.gateway =
+        std::make_unique<Gateway>(m_config, io_ctx, ssl_ctx, components.queue, *components.metrics);
     components.decoder = std::make_unique<Decoder>();
     components.sequencer = std::make_unique<Sequencer>();
     components.orderbook = std::make_unique<Orderbook>();
     components.recovery_manager =
-        std::make_unique<RecoveryManager>(*components.gateway, *components.decoder, *components.sequencer, *components.orderbook);
+        std::make_unique<RecoveryManager>(
+            *components.gateway,
+            *components.decoder,
+            *components.sequencer,
+            *components.orderbook,
+            *components.metrics);
 
     log::info("RuntimeFactory", "created all components");
     return components;

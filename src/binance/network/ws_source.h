@@ -2,6 +2,7 @@
 
 #include "common/queue.h"
 #include "common/envelope.h"
+#include "metrics/registry.h"
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -46,6 +47,7 @@ public:
              std::string host,
              std::string port,
              std::string target,
+             metrics::Registry& metrics,
              error_handler_t on_error = {},
              state_handler_t on_state = {},
              drop_handler_t on_drop = {});
@@ -84,6 +86,7 @@ private:
     net::steady_timer m_reconnect_timer;
 
     std::shared_ptr<IQueue> m_queue;
+    metrics::Registry& m_metrics;
 
     std::string m_host;
     std::string m_port;

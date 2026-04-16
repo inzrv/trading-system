@@ -1,6 +1,7 @@
 #pragma once
 
 #include "envelope.h"
+#include "metrics/registry.h"
 
 #include <condition_variable>
 #include <cstddef>
@@ -19,15 +20,22 @@ template<size_t Capacity>
 class Queue final : public IQueue
 {
 public:
+    explicit Queue(metrics::Registry& metrics) noexcept
+        : m_metrics(metrics)
+    {
+    }
+
     bool try_push(InputEnvelope&& item) override
     {
         {
             std::lock_guard lock{m_mutex};
             if (m_queue.size() >= Capacity) {
+                m_metrics.on_queue_drop();
                 return false;
             }
 
             m_queue.push_back(std::move(item));
+            m_metrics.set_queue_size(m_queue.size());
         }
 
         m_cv.notify_one();
@@ -43,10 +51,12 @@ public:
 
         InputEnvelope item = std::move(m_queue.front());
         m_queue.pop_front();
+        m_metrics.set_queue_size(m_queue.size());
         return item;
     }
 
 private:
+    metrics::Registry& m_metrics;
     std::mutex m_mutex;
     std::condition_variable m_cv;
     std::deque<InputEnvelope> m_queue;

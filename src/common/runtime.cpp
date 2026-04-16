@@ -15,6 +15,7 @@ Runtime::Runtime(IRuntimeFactory& factory)
     m_ssl_ctx.set_verify_mode(ssl::verify_peer);
 
     auto components = factory.create(m_io_ctx, m_ssl_ctx);
+    m_metrics = std::move(components.metrics);
     m_queue = std::move(components.queue);
     m_gateway = std::move(components.gateway);
     m_decoder = std::move(components.decoder);
@@ -22,9 +23,16 @@ Runtime::Runtime(IRuntimeFactory& factory)
     m_orderbook = std::move(components.orderbook);
     m_recovery_manager = std::move(components.recovery_manager);
 
-    if (!m_queue || !m_gateway || !m_decoder || !m_sequencer || !m_orderbook || !m_recovery_manager) {
+    if (!m_metrics || !m_queue || !m_gateway || !m_decoder || !m_sequencer || !m_orderbook || !m_recovery_manager) {
         throw std::invalid_argument("runtime factory returned incomplete components");
     }
+
+    m_metrics_reporter = std::make_unique<metrics::Reporter>(
+        *m_metrics,
+        kMetricsReportInterval,
+        [](std::string payload) {
+            log::info("Metrics", "{}", payload);
+        });
 
     log::info("Runtime", "Runtime initialized with all components");
 }
@@ -38,6 +46,8 @@ std::expected<void, RuntimeError> Runtime::run()
 {
     log::info("Runtime", "starting...");
     m_running = true;
+    m_metrics_reporter->start();
+    m_metrics_reporter->report_once();
 
     m_io_thread = std::thread([this]() {
         m_io_ctx.run();
@@ -62,6 +72,8 @@ void Runtime::stop()
     m_running = false;
     log::info("Runtime", "stopping...");
     m_recovery_manager->stop();
+    m_metrics_reporter->report_once();
+    m_metrics_reporter->stop();
     m_work_guard.reset();
     m_io_ctx.stop();
 
@@ -101,6 +113,7 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
             log::warn("Runtime", "sequencer error: {}", error_to_string(seq_error));
 
             if (seq_error == SequencingError::GAP_DETECTED) {
+                m_metrics->on_sequencer_gap_detected();
                 const auto init_res = m_recovery_manager->begin_initialize();
                 if (!init_res) {
                     log::error("Runtime", "initialization failed: {}", error_to_string(init_res.error()));
@@ -113,10 +126,12 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
         }
 
         m_orderbook->apply(update);
+        m_metrics->set_last_applied_update_id(update.last_update);
         log::debug("Runtime", "applied update last_update={}", update.last_update);
 
         const auto l1 = m_orderbook->l1();
         if (!is_valid(l1)) {
+            m_metrics->on_orderbook_invalid();
             log::warn("Runtime", "orderbook is invalid: bid_price={}, ask_price={}", l1.best_bid->price, l1.best_ask->price);
         }
     }

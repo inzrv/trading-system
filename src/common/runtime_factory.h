@@ -2,6 +2,7 @@
 
 #include "decoder.h"
 #include "gateway.h"
+#include "metrics/registry.h"
 #include "orderbook.h"
 #include "queue.h"
 #include "recovery_manager.h"
@@ -14,6 +15,7 @@
 
 struct RuntimeComponents
 {
+    std::unique_ptr<metrics::Registry> metrics;
     std::shared_ptr<IQueue> queue;
     std::unique_ptr<IGateway> gateway;
     std::unique_ptr<IDecoder> decoder;

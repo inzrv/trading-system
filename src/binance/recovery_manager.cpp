@@ -8,17 +8,20 @@ namespace binance
 RecoveryManager::RecoveryManager(IGateway& gateway,
                                  IDecoder& decoder,
                                  ISequencer& sequencer,
-                                 IOrderbook& orderbook)
+                                 IOrderbook& orderbook,
+                                 metrics::Registry& metrics)
     : m_gateway(gateway)
     , m_decoder(decoder)
     , m_sequencer(sequencer)
     , m_orderbook(orderbook)
+    , m_metrics(metrics)
 {}
 
 std::expected<void, RecoveringError> RecoveryManager::begin_initialize()
 {
     log::info("RecoveryManager", "begin initialize");
     m_state = State::RECOVERING;
+    m_metrics.set_recovering(true);
 
     m_buffer.clear();
     m_snapshot.reset();
@@ -33,6 +36,7 @@ std::expected<void, RecoveringError> RecoveryManager::begin_initialize()
     if (!wait_res) {
         log::error("RecoveryManager", "failed to start gateway: {}", error_to_string(wait_res.error()));
         m_state = State::STOPPED;
+        m_metrics.set_recovering(false);
         return std::unexpected(RecoveringError::GATEWAY_START_ERROR);
     }
 
@@ -57,6 +61,7 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
         const auto decode_res = m_decoder.decode_snapshot(*snapshot_res);
         if (!decode_res) {
             log::error("RecoveryManager", "snapshot parsing failed during recovery");
+            m_metrics.on_decode_error();
             return std::unexpected(RecoveringError::SNAPSHOT_PARSING_ERROR);
         }
 
@@ -92,6 +97,8 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
     m_snapshot.reset();
     m_snapshot_requested = false;
     m_state = State::READY;
+    m_metrics.on_recovery();
+    m_metrics.set_recovering(false);
     log::info("RecoveryManager", "recovered and ready");
     return {};
 }
@@ -106,6 +113,7 @@ void RecoveryManager::stop()
     m_sequencer.reset();
     m_orderbook.reset();
     m_state = State::STOPPED;
+    m_metrics.set_recovering(false);
 }
 
 bool RecoveryManager::is_recovering() const
@@ -116,6 +124,7 @@ bool RecoveryManager::is_recovering() const
 void RecoveryManager::on_decode_error(DecodingError error) const
 {
     log::warn("RecoveryManager", "decode error: {}", error_to_string(error));
+    m_metrics.on_decode_error();
 }
 
 void RecoveryManager::buffer_update(SequencedBookUpdate update)
@@ -146,11 +155,16 @@ RecoveryManager::ApplyResult RecoveryManager::apply_updates_from(size_t pos)
 {
     for (size_t i = pos; i < m_buffer.size(); ++i) {
         const auto& update = m_buffer[i];
-        if (!m_sequencer.check(update)) {
+        const auto seq_res = m_sequencer.check(update);
+        if (!seq_res) {
+            if (seq_res.error() == SequencingError::GAP_DETECTED) {
+                m_metrics.on_sequencer_gap_detected();
+            }
             return ApplyResult::RESTART_REQUIRED;
         }
 
         m_orderbook.apply(update);
+        m_metrics.set_last_applied_update_id(update.last_update);
     }
 
     return ApplyResult::APPLIED;
