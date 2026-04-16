@@ -65,12 +65,12 @@ std::expected<void, RuntimeError> Runtime::run()
 
 void Runtime::stop()
 {
-    if (!m_running) {
+    if (!m_running.exchange(false)) {
         return;
     }
 
-    m_running = false;
     log::info("Runtime", "stopping...");
+    m_queue->close();
     m_recovery_manager->stop();
     m_metrics_reporter->report_once();
     m_metrics_reporter->stop();
@@ -84,10 +84,14 @@ void Runtime::stop()
 
 std::expected<void, RuntimeError> Runtime::run_core_loop()
 {
-    while (m_running) {
+    for (;;) {
         auto item = m_queue->wait_pop();
+        if (!item) {
+            log::info("Runtime", "input queue closed, stopping core loop");
+            return {};
+        }
 
-        const auto update_res = m_decoder->decode_diff(item.payload);
+        const auto update_res = m_decoder->decode_diff(item->payload);
         if (!update_res) {
             log::warn("Runtime", "failed to parse update: {}", error_to_string(update_res.error()));
             m_recovery_manager->on_decode_error(update_res.error());

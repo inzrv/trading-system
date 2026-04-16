@@ -13,6 +13,7 @@
 #include <boost/asio.hpp>
 #include <boost/beast/ssl.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <expected>
 #include <memory>
@@ -40,7 +41,7 @@ private:
     ssl::context m_ssl_ctx;
     net::executor_work_guard<net::io_context::executor_type> m_work_guard;
     std::thread m_io_thread;
-    bool m_running{false};
+    std::atomic<bool> m_running{false};
 
     std::unique_ptr<metrics::Registry> m_metrics;
     std::unique_ptr<metrics::Reporter> m_metrics_reporter;

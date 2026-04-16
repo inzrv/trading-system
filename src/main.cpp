@@ -3,6 +3,7 @@
 #include "common/log.h"
 #include "common/runtime.h"
 #include "common/config.h"
+#include "common/signal_listener.h"
 
 #include <fstream>
 #include <iterator>
@@ -61,7 +62,20 @@ int main(int argc, char* argv[])
         log::info("Main", "runtime factory created, starting runtime");
 
         Runtime runtime{*factory};
+
+        SignalListener signal_listener([&runtime](int signal) {
+            log::info("Main", "received signal {}, requesting shutdown", signal);
+            runtime.stop();
+        });
+
+        if (!signal_listener.start()) {
+            log::error("Main", "failed to start signal listener");
+            return 1;
+        }
+
         const auto run_res = runtime.run();
+        signal_listener.stop();
+
         if (!run_res) {
             log::error("Main", "trading system finished with runtime error: {}", error_to_string(run_res.error()));
             return 1;
