@@ -1,6 +1,7 @@
 #include "gateway.h"
 
 #include "common/log.h"
+#include "metrics/scoped_latency.h"
 #include "utils/utils.h"
 
 #include <thread>
@@ -66,7 +67,9 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
         m_metrics.on_snapshot_request();
 
         log::debug("Gateway", "requesting snapshot... {} (attempt {}/{})", target, attempt, kSnapshotMaxAttempts);
-        const auto res = m_rest_client->get(target);
+        const auto res = metrics::measure(m_metrics, &metrics::Registry::observe_snapshot_request, [&] {
+            return m_rest_client->get(target);
+        });
         if (res) {
             log::debug("Gateway", "snapshot request succeeded");
             return *res;

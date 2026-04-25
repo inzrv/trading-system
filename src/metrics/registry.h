@@ -44,6 +44,39 @@ inline void update_max(gauge_t& gauge, uint64_t candidate) noexcept
     }
 }
 
+class LatencyStats
+{
+public:
+    void observe(std::chrono::nanoseconds duration) noexcept
+    {
+        const auto ns = duration.count() > 0
+            ? static_cast<uint64_t>(duration.count())
+            : 0ull;
+
+        inc(m_count);
+        m_total_ns.fetch_add(ns, std::memory_order_relaxed);
+        update_max(m_max_ns, ns);
+    }
+
+    LatencySnapshot snapshot() const noexcept
+    {
+        return LatencySnapshot{
+            .count = load(m_count),
+            .total_ns = load(m_total_ns),
+            .max_ns = load(m_max_ns),
+        };
+    }
+
+private:
+    counter_t m_count{0};
+    gauge_t m_total_ns{0};
+    gauge_t m_max_ns{0};
+};
+
+// Registry stores telemetry as independent relaxed atomics.
+// Snapshots are intentionally approximate: related fields may be observed in
+// slightly different states, which is acceptable for metrics and keeps the
+// hot path cheap and lock-free.
 class Registry
 {
 public:
@@ -94,6 +127,51 @@ public:
         inc(m_orderbook_invalid_total);
     }
 
+    void observe_decode(std::chrono::nanoseconds duration) noexcept
+    {
+        m_decode_latency.observe(duration);
+    }
+
+    void observe_sequencer(std::chrono::nanoseconds duration) noexcept
+    {
+        m_sequencer_latency.observe(duration);
+    }
+
+    void observe_orderbook_apply(std::chrono::nanoseconds duration) noexcept
+    {
+        m_orderbook_apply_latency.observe(duration);
+    }
+
+    void observe_snapshot_request(std::chrono::nanoseconds duration) noexcept
+    {
+        m_snapshot_request_latency.observe(duration);
+    }
+
+    void observe_snapshot_decode(std::chrono::nanoseconds duration) noexcept
+    {
+        m_snapshot_decode_latency.observe(duration);
+    }
+
+    void observe_recovery_replay(std::chrono::nanoseconds duration) noexcept
+    {
+        m_recovery_replay_latency.observe(duration);
+    }
+
+    void observe_queue_wait(std::chrono::nanoseconds duration) noexcept
+    {
+        m_queue_wait_latency.observe(duration);
+    }
+
+    void observe_wait_pop(std::chrono::nanoseconds duration) noexcept
+    {
+        m_wait_pop_latency.observe(duration);
+    }
+
+    void observe_message_e2e(std::chrono::nanoseconds duration) noexcept
+    {
+        m_message_e2e_latency.observe(duration);
+    }
+
     void set_queue_size(uint64_t size) noexcept
     {
         store(m_queue_size, size);
@@ -130,6 +208,15 @@ public:
             .last_ws_message_unix_ms = load(m_last_ws_message_unix_ms),
             .last_snapshot_unix_ms = load(m_last_snapshot_unix_ms),
             .last_applied_update_unix_ms = load(m_last_applied_update_unix_ms),
+            .decode_latency = m_decode_latency.snapshot(),
+            .sequencer_latency = m_sequencer_latency.snapshot(),
+            .orderbook_apply_latency = m_orderbook_apply_latency.snapshot(),
+            .snapshot_request_latency = m_snapshot_request_latency.snapshot(),
+            .snapshot_decode_latency = m_snapshot_decode_latency.snapshot(),
+            .recovery_replay_latency = m_recovery_replay_latency.snapshot(),
+            .queue_wait_latency = m_queue_wait_latency.snapshot(),
+            .wait_pop_latency = m_wait_pop_latency.snapshot(),
+            .message_e2e_latency = m_message_e2e_latency.snapshot(),
         };
     }
 
@@ -152,6 +239,16 @@ private:
     timestamp_t m_last_ws_message_unix_ms{0};
     timestamp_t m_last_snapshot_unix_ms{0};
     timestamp_t m_last_applied_update_unix_ms{0};
+
+    LatencyStats m_decode_latency;
+    LatencyStats m_sequencer_latency;
+    LatencyStats m_orderbook_apply_latency;
+    LatencyStats m_snapshot_request_latency;
+    LatencyStats m_snapshot_decode_latency;
+    LatencyStats m_recovery_replay_latency;
+    LatencyStats m_queue_wait_latency;
+    LatencyStats m_wait_pop_latency;
+    LatencyStats m_message_e2e_latency;
 };
 
 } // namespace metrics

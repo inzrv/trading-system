@@ -1,11 +1,12 @@
 #pragma once
 
+#include "common/time.h"
+
 #include <string>
-#include <chrono>
 
 struct InputEnvelope
 {
-    std::chrono::system_clock::time_point timestamp;
+    latency_time_point ingress_time;
     std::string source;
     std::string payload;
 };

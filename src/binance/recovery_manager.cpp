@@ -1,6 +1,7 @@
 #include "recovery_manager.h"
 
 #include "common/log.h"
+#include "metrics/scoped_latency.h"
 
 namespace binance
 {
@@ -58,7 +59,9 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
             return std::unexpected(RecoveringError::SNAPSHOT_REQUEST_ERROR);
         }
 
-        const auto decode_res = m_decoder.decode_snapshot(*snapshot_res);
+        const auto decode_res = metrics::measure(m_metrics, &metrics::Registry::observe_snapshot_decode, [&] {
+            return m_decoder.decode_snapshot(*snapshot_res);
+        });
         if (!decode_res) {
             log::error("RecoveryManager", "snapshot parsing failed during recovery");
             m_metrics.on_decode_error();
@@ -81,7 +84,9 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
     m_sequencer.reset();
     m_sequencer.initialize(m_snapshot->last_update_id);
 
-    const auto applying_status = apply_updates_from(*first_pos);
+    const auto applying_status = metrics::measure(m_metrics, &metrics::Registry::observe_recovery_replay, [&] {
+        return apply_updates_from(*first_pos);
+    });
     if (applying_status == ApplyResult::RESTART_REQUIRED) {
         log::warn("RecoveryManager", "buffered replay detected a gap, restarting recovery");
         const auto init_res = begin_initialize();
@@ -155,7 +160,9 @@ RecoveryManager::ApplyResult RecoveryManager::apply_updates_from(size_t pos)
 {
     for (size_t i = pos; i < m_buffer.size(); ++i) {
         const auto& update = m_buffer[i];
-        const auto seq_res = m_sequencer.check(update);
+        const auto seq_res = metrics::measure(m_metrics, &metrics::Registry::observe_sequencer, [&] {
+            return m_sequencer.check(update);
+        });
         if (!seq_res) {
             if (seq_res.error() == SequencingError::GAP_DETECTED) {
                 m_metrics.on_sequencer_gap_detected();
@@ -163,7 +170,9 @@ RecoveryManager::ApplyResult RecoveryManager::apply_updates_from(size_t pos)
             return ApplyResult::RESTART_REQUIRED;
         }
 
-        m_orderbook.apply(update);
+        metrics::measure(m_metrics, &metrics::Registry::observe_orderbook_apply, [&] {
+            m_orderbook.apply(update);
+        });
         m_metrics.set_last_applied_update_id(update.last_update);
     }
 

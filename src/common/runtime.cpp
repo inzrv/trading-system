@@ -2,6 +2,7 @@
 
 #include "common/orderbook_validation.h"
 #include "common/log.h"
+#include "metrics/scoped_latency.h"
 
 #include <stdexcept>
 #include <utility>
@@ -85,13 +86,20 @@ void Runtime::stop()
 std::expected<void, RuntimeError> Runtime::run_core_loop()
 {
     for (;;) {
+        const auto wait_started_at = latency_clock::now();
         auto item = m_queue->wait_pop();
+        m_metrics->observe_wait_pop(elapsed_since(wait_started_at));
+
         if (!item) {
             log::info("Runtime", "input queue closed, stopping core loop");
             return {};
         }
 
-        const auto update_res = m_decoder->decode_diff(item->payload);
+        m_metrics->observe_queue_wait(elapsed_since(item->ingress_time));
+
+        const auto update_res = metrics::measure(*m_metrics, &metrics::Registry::observe_decode, [&] {
+            return m_decoder->decode_diff(item->payload);
+        });
         if (!update_res) {
             log::warn("Runtime", "failed to parse update: {}", error_to_string(update_res.error()));
             m_recovery_manager->on_decode_error(update_res.error());
@@ -111,7 +119,9 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
             continue;
         }
 
-        const auto seq_res = m_sequencer->check(update);
+        const auto seq_res = metrics::measure(*m_metrics, &metrics::Registry::observe_sequencer, [&] {
+            return m_sequencer->check(update);
+        });
         if (!seq_res) {
             const auto seq_error = seq_res.error();
             log::warn("Runtime", "sequencer error: {}", error_to_string(seq_error));
@@ -129,7 +139,10 @@ std::expected<void, RuntimeError> Runtime::run_core_loop()
             continue;
         }
 
-        m_orderbook->apply(update);
+        metrics::measure(*m_metrics, &metrics::Registry::observe_orderbook_apply, [&] {
+            m_orderbook->apply(update);
+        });
+        m_metrics->observe_message_e2e(elapsed_since(item->ingress_time));
         m_metrics->set_last_applied_update_id(update.last_update);
         log::debug("Runtime", "applied update last_update={}", update.last_update);
 

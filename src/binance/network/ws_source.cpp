@@ -268,7 +268,7 @@ void WsSource::publish_message(std::string payload)
     }
 
     const bool pushed = m_queue->try_push(InputEnvelope{
-        .timestamp = std::chrono::system_clock::now(),
+        .ingress_time = latency_clock::now(),
         .source = m_host,
         .payload = std::move(payload)
     });
