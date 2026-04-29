@@ -6,6 +6,7 @@
 #include "orderbook.h"
 #include "queue.h"
 #include "recovery_manager.h"
+#include "recording/market_data_recorder.h"
 #include "sequencer.h"
 
 #include <boost/asio/io_context.hpp>
@@ -16,6 +17,7 @@
 struct RuntimeComponents
 {
     std::unique_ptr<metrics::Registry> metrics;
+    std::unique_ptr<recording::MarketDataRecorder> market_data_recorder;
     std::shared_ptr<IQueue> queue;
     std::unique_ptr<IGateway> gateway;
     std::unique_ptr<IDecoder> decoder;

@@ -6,6 +6,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace binance
@@ -35,6 +36,15 @@ struct OrderbookConfig
     uint16_t limit;
 };
 
+struct RecordingConfig
+{
+    bool from_json(const boost::json::object& json);
+
+    std::string updates_path;
+    std::string snapshots_path;
+    std::chrono::milliseconds flush_interval{250};
+};
+
 struct Config final : public IConfig
 {
     Market market() const noexcept override
@@ -47,6 +57,7 @@ struct Config final : public IConfig
     Symbol symbol;
     DepthStreamConfig depth_stream_conf;
     OrderbookConfig orderbook_conf;
+    std::optional<RecordingConfig> recording_conf;
 };
 
 } // namespace binance

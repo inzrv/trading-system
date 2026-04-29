@@ -17,6 +17,7 @@ Runtime::Runtime(IRuntimeFactory& factory)
 
     auto components = factory.create(m_io_ctx, m_ssl_ctx);
     m_metrics = std::move(components.metrics);
+    m_market_data_recorder = std::move(components.market_data_recorder);
     m_queue = std::move(components.queue);
     m_gateway = std::move(components.gateway);
     m_decoder = std::move(components.decoder);
@@ -47,6 +48,9 @@ std::expected<void, RuntimeError> Runtime::run()
 {
     log::info("Runtime", "starting...");
     m_running = true;
+    if (m_market_data_recorder) {
+        m_market_data_recorder->start();
+    }
     m_metrics_reporter->start();
     m_metrics_reporter->report_once();
 
@@ -73,6 +77,9 @@ void Runtime::stop()
     log::info("Runtime", "stopping...");
     m_queue->close();
     m_recovery_manager->stop();
+    if (m_market_data_recorder) {
+        m_market_data_recorder->stop();
+    }
     m_metrics_reporter->report_once();
     m_metrics_reporter->stop();
     m_work_guard.reset();

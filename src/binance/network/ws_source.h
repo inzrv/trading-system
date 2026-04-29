@@ -3,6 +3,7 @@
 #include "common/queue.h"
 #include "common/envelope.h"
 #include "metrics/registry.h"
+#include "recording/market_data_recorder.h"
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
@@ -48,6 +49,7 @@ public:
              std::string port,
              std::string target,
              metrics::Registry& metrics,
+             recording::MarketDataRecorder* market_data_recorder = nullptr,
              error_handler_t on_error = {},
              state_handler_t on_state = {},
              drop_handler_t on_drop = {});
@@ -87,6 +89,7 @@ private:
 
     std::shared_ptr<IQueue> m_queue;
     metrics::Registry& m_metrics;
+    recording::MarketDataRecorder* m_market_data_recorder{nullptr};
 
     std::string m_host;
     std::string m_port;

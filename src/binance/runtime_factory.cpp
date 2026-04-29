@@ -7,6 +7,7 @@
 #include "sequencer.h"
 #include "common/log.h"
 #include "common/queue.h"
+#include "recording/market_data_recorder.h"
 
 #include <utility>
 
@@ -22,10 +23,29 @@ RuntimeComponents RuntimeFactory::create(boost::asio::io_context& io_ctx,
 {
     log::info("RuntimeFactory", "creating components...");
     RuntimeComponents components;
+
+    if (m_config.recording_conf) {
+        log::info("RuntimeFactory",
+                  "market data recording enabled: updates_path={} snapshots_path={} flush_interval={}ms",
+                  m_config.recording_conf->updates_path,
+                  m_config.recording_conf->snapshots_path,
+                  m_config.recording_conf->flush_interval.count());
+        components.market_data_recorder = std::make_unique<recording::MarketDataRecorder>(
+            m_config.recording_conf->updates_path,
+            m_config.recording_conf->snapshots_path,
+            m_config.recording_conf->flush_interval);
+    }
+
     components.metrics = std::make_unique<metrics::Registry>();
     components.queue = std::make_shared<Queue<10'000>>(*components.metrics);
     components.gateway =
-        std::make_unique<Gateway>(m_config, io_ctx, ssl_ctx, components.queue, *components.metrics);
+        std::make_unique<Gateway>(
+            m_config,
+            io_ctx,
+            ssl_ctx,
+            components.queue,
+            *components.metrics,
+            components.market_data_recorder.get());
     components.decoder = std::make_unique<Decoder>();
     components.sequencer = std::make_unique<Sequencer>();
     components.orderbook = std::make_unique<Orderbook>();

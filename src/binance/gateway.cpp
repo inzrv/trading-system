@@ -13,12 +13,14 @@ Gateway::Gateway(Config config,
                  net::io_context& io_ctx,
                  ssl::context& ssl_ctx,
                  std::shared_ptr<IQueue> queue,
-                 metrics::Registry& metrics)
+                 metrics::Registry& metrics,
+                 recording::MarketDataRecorder* market_data_recorder)
     : m_config(std::move(config))
     , m_io_ctx(io_ctx)
     , m_ssl_ctx(ssl_ctx)
     , m_queue(queue)
     , m_metrics(metrics)
+    , m_market_data_recorder(market_data_recorder)
 {
     const auto depth_stream_host = m_config.depth_stream_conf.host;
     const auto depth_stream_port = std::to_string(m_config.depth_stream_conf.port);
@@ -34,6 +36,7 @@ Gateway::Gateway(Config config,
         depth_stream_port,
         depth_stream_target,
         m_metrics,
+        m_market_data_recorder,
         [this](beast::error_code ec, std::string_view where) {
             on_ws_error(ec, where);
         },
@@ -65,6 +68,9 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
     const auto target = std::format("/api/v3/depth?symbol={}&limit={}", orderbook_symbol, orderbook_limit);
     for (int attempt = 1; attempt <= kSnapshotMaxAttempts; ++attempt) {
         m_metrics.on_snapshot_request();
+        std::optional<uint64_t> last_update_idx = m_market_data_recorder
+            ? std::make_optional(m_market_data_recorder->last_update_idx())
+            : std::nullopt;
 
         log::debug("Gateway", "requesting snapshot... {} (attempt {}/{})", target, attempt, kSnapshotMaxAttempts);
         const auto res = metrics::measure(m_metrics, &metrics::Registry::observe_snapshot_request, [&] {
@@ -72,6 +78,9 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
         });
         if (res) {
             log::debug("Gateway", "snapshot request succeeded");
+            if (m_market_data_recorder) {
+                m_market_data_recorder->record_snapshot(*last_update_idx, m_config.orderbook_conf.host, *res);
+            }
             return *res;
         }
         last_error = res.error();

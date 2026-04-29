@@ -7,6 +7,7 @@
 #include "network/rest_client.h"
 #include "config.h"
 #include "metrics/registry.h"
+#include "recording/market_data_recorder.h"
 
 #include <memory>
 #include <chrono>
@@ -21,7 +22,8 @@ public:
             net::io_context& io_ctx,
             ssl::context& ssl_ctx,
             std::shared_ptr<IQueue> queue,
-            metrics::Registry& metrics);
+            metrics::Registry& metrics,
+            recording::MarketDataRecorder* market_data_recorder = nullptr);
 
     void start() override;
     void stop() override;
@@ -39,6 +41,7 @@ private:
     ssl::context& m_ssl_ctx;
     std::shared_ptr<IQueue> m_queue;
     metrics::Registry& m_metrics;
+    recording::MarketDataRecorder* m_market_data_recorder{nullptr};
     std::unique_ptr<WsSource> m_ws_source;
     std::unique_ptr<RestClient> m_rest_client;
 
