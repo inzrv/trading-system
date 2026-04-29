@@ -1,20 +1,18 @@
 #pragma once
 
+#include "common/worker.h"
 #include "format.h"
 #include "registry.h"
 
 #include <chrono>
-#include <condition_variable>
 #include <functional>
-#include <mutex>
 #include <string>
-#include <thread>
 #include <utility>
 
 namespace metrics
 {
 
-class Reporter
+class Reporter final : public Worker
 {
 public:
     using sink_t = std::function<void(std::string)>;
@@ -40,38 +38,8 @@ public:
         }
     }
 
-    void start()
-    {
-        std::lock_guard lock{m_mutex};
-        if (m_running) {
-            return;
-        }
-
-        m_running = true;
-        m_thread = std::thread([this]() {
-            run();
-        });
-    }
-
-    void stop()
-    {
-        {
-            std::lock_guard lock{m_mutex};
-            if (!m_running) {
-                return;
-            }
-
-            m_running = false;
-        }
-
-        m_cv.notify_all();
-        if (m_thread.joinable()) {
-            m_thread.join();
-        }
-    }
-
 private:
-    void run()
+    void run() override
     {
         std::unique_lock lock{m_mutex};
 
@@ -93,11 +61,6 @@ private:
     const Registry& m_registry;
     std::chrono::milliseconds m_interval;
     sink_t m_sink;
-
-    std::mutex m_mutex;
-    std::condition_variable m_cv;
-    bool m_running{false};
-    std::thread m_thread;
 };
 
 } // namespace metrics
