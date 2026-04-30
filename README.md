@@ -3,6 +3,7 @@
 A minimal C++23 prototype of a Binance market data processing pipeline (L2 order book) with snapshot-based recovery.
 
 The project consumes `depthUpdate` events from WebSocket, maintains a local order book, and attempts to recover via REST snapshot + buffered replay when a sequence gap is detected.
+It also includes basic observability and optional raw market data recording for future replay experiments.
 
 ## Implemented So Far
 
@@ -12,6 +13,10 @@ The project consumes `depthUpdate` events from WebSocket, maintains a local orde
 - Sequence continuity checks (`Sequencer`)
 - Update buffering during recovery
 - Order book recovery via snapshot + replay
+- Runtime metrics for counters and latency observations
+- Optional market data recording into JSONL files:
+  - WebSocket updates
+  - REST snapshots with replay barrier metadata
 - Single-threaded core processing loop with a dedicated `boost::asio` I/O thread
 
 ## Tech Stack
@@ -71,6 +76,20 @@ Or from the build without tests:
 ./build-no-tests/src/trading_system ./config.json
 ```
 
+## Configuration
+
+The sample `config.json` enables Binance BTCUSDT market data and optional raw recording:
+
+```json
+"recording" : {
+    "updatesPath" : "./data/updates.jsonl",
+    "snapshotsPath" : "./data/snapshots.jsonl",
+    "flushIntervalMs" : 250
+}
+```
+
+Remove the `recording` section to run without market data recording.
+
 ## Data Flow
 
 1. `Gateway` receives WS data and pushes raw payloads into a queue.
@@ -80,16 +99,30 @@ Or from the build without tests:
 5. If the sequence is valid, `Orderbook` applies updates.
 6. If a gap is detected, `RecoveryManager` performs snapshot + buffered replay.
 
+## Market Data Recording
+
+`MarketDataRecorder` writes raw input data to JSONL files in a background worker:
+
+- `updates.jsonl` stores raw WebSocket update payloads with a monotonic `update_idx`.
+- `snapshots.jsonl` stores raw REST snapshot payloads.
+- Each snapshot also records `requested_after_update_idx` and `available_after_update_idx`.
+
+Those two snapshot indexes are intended for deterministic replay:
+
+- `requested_after_update_idx` is the last recorded WS update when the snapshot request was started.
+- `available_after_update_idx` is the last recorded WS update when the snapshot response was recorded.
+- A future replay gateway can use these barriers to avoid returning a snapshot too early relative to the replayed update stream.
 
 ## Current State and Limitations
 
 - This is an infrastructure prototype, without strategy or execution logic.
-- No persistence/journal or file-based replay yet.
-- No metrics, no health checks.
+- Market data can be recorded, but file-based replay is not implemented yet.
+- Metrics exist, but there are no health checks or external metrics export yet.
 - Supports a single source (Binance).
 
 ## Next Improvements
 
 - Add integration tests for the decoder/sequencer/recovery pipeline.
 - Add normalization into exchange-agnostic events.
-- Add journaling/replay and observability (metrics).
+- Implement file-based market data replay from recorded updates/snapshots.
+- Reduce main-path latency overhead when market data recording is enabled.
