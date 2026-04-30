@@ -10,70 +10,49 @@ namespace binance
 std::expected<SequencedBookUpdate, DecodingError>
 Decoder::decode_diff(std::string_view diff_payload) const
 {   
-    const auto parse_to_json_res = parse_to_json(diff_payload);
-    if (!parse_to_json_res) {
+    const auto json_object_res = parse_to_json_object(diff_payload);
+    if (!json_object_res) {
         log::warn("Decoder", "failed to parse diff payload");
         return std::unexpected(DecodingError::PAYLOAD_PARSING_ERROR);
     }
 
-    boost::json::value json_value = *parse_to_json_res;
-    if (!json_value.is_object()) {
+    const auto& obj = *json_object_res;
+
+    const auto event_type = json_string(obj, "e");
+    const auto event_time = json_int64(obj, "E");
+    const auto symbol = json_string(obj, "s");
+    const auto first_update = json_uint64(obj, "U");
+    const auto last_update = json_uint64(obj, "u");
+    const auto bids = json_array(obj, "b");
+    const auto asks = json_array(obj, "a");
+
+    if (!event_type || !event_time || !symbol || !first_update || !last_update || !bids || !asks) {
         return std::unexpected(DecodingError::INVALID_PAYLOAD);
     }
 
-    const auto& obj = json_value.as_object();
-
-    const auto event_type = obj.if_contains("e");
-    const auto event_time = obj.if_contains("E");
-    const auto symbol = obj.if_contains("s");
-    const auto first_update = obj.if_contains("U");
-    const auto last_update = obj.if_contains("u");
-    const auto bids = obj.if_contains("b");
-    const auto asks = obj.if_contains("a");
-
-    if (!event_type ||
-        !event_time ||
-        !symbol ||
-        !first_update ||
-        !last_update ||
-        !bids ||
-        !asks) {
-        return std::unexpected(DecodingError::INVALID_PAYLOAD);
-    }
-
-    if (!event_type->is_string() ||
-        !symbol->is_string() ||
-        !event_time->is_int64() ||
-        !first_update->is_int64() ||
-        !last_update->is_int64() ||
-        !bids->is_array() ||
-        !asks->is_array()) {
-        return std::unexpected(DecodingError::INVALID_PAYLOAD);
-    }
-
-    if (auto type = event_type_from_string(event_type->as_string());  type != EventType::DEPTH_UPDATE) {
+    if (auto type = event_type_from_string(*event_type);  type != EventType::DEPTH_UPDATE) {
         return std::unexpected(DecodingError::UNEXPECTED_VALUE);
     }
 
-    if (first_update->as_int64() > last_update->as_int64()) {
+    if (*first_update > *last_update) {
         return std::unexpected(DecodingError::INVALID_PAYLOAD);
     }
 
-    auto bids_res = parse_levels(bids->as_array());
+    auto bids_res = parse_levels(*bids);
     if (!bids_res) {
         return std::unexpected(bids_res.error());
     }
 
-    auto asks_res = parse_levels(asks->as_array());
+    auto asks_res = parse_levels(*asks);
     if (!asks_res) {
         return std::unexpected(asks_res.error());
     }
 
     SequencedBookUpdate update = {
-        .event_time = std::chrono::system_clock::time_point{std::chrono::milliseconds{event_time->as_int64()}},
-        .symbol = symbol_from_string(symbol->as_string()),
-        .first_update = static_cast<uint64_t>(first_update->as_int64()),
-        .last_update = static_cast<uint64_t>(last_update->as_int64()),
+        .event_time = std::chrono::system_clock::time_point{std::chrono::milliseconds{*event_time}},
+        .symbol = symbol_from_string(*symbol),
+        .first_update = *first_update,
+        .last_update = *last_update,
         .bids = std::move(bids_res.value()),
         .asks = std::move(asks_res.value()),
     };
@@ -84,47 +63,34 @@ Decoder::decode_diff(std::string_view diff_payload) const
 std::expected<Snapshot, DecodingError>
 Decoder::decode_snapshot(std::string_view snapshot_payload) const
 {
-    const auto parse_to_json_res = parse_to_json(snapshot_payload);
-    if (!parse_to_json_res) {
+    const auto json_object_res = parse_to_json_object(snapshot_payload);
+    if (!json_object_res) {
         log::warn("Decoder", "failed to parse snapshot payload");
         return std::unexpected(DecodingError::PAYLOAD_PARSING_ERROR);
     }
 
-    boost::json::value json_value = *parse_to_json_res;
-    if (!json_value.is_object()) {
+    const auto& obj = *json_object_res;
+
+    const auto last_update_id = json_uint64(obj, "lastUpdateId");
+    const auto bids = json_array(obj, "bids");
+    const auto asks = json_array(obj, "asks");
+
+    if (!last_update_id || !bids || !asks) {
         return std::unexpected(DecodingError::INVALID_PAYLOAD);
     }
 
-    const auto& obj = json_value.as_object();
-
-    const auto last_update_id = obj.if_contains("lastUpdateId");
-    const auto bids = obj.if_contains("bids");
-    const auto asks = obj.if_contains("asks");
-
-    if (!last_update_id ||
-        !bids ||
-        !asks) {
-        return std::unexpected(DecodingError::INVALID_PAYLOAD);
-    }
-
-    if (!last_update_id->is_int64() ||
-        !bids->is_array() ||
-        !asks->is_array()) {
-        return std::unexpected(DecodingError::INVALID_PAYLOAD);
-    }
-
-    auto bids_res = parse_levels(bids->as_array());
+    auto bids_res = parse_levels(*bids);
     if (!bids_res) {
         return std::unexpected(bids_res.error());
     }
 
-    auto asks_res = parse_levels(asks->as_array());
+    auto asks_res = parse_levels(*asks);
     if (!asks_res) {
         return std::unexpected(asks_res.error());
     }
 
     Snapshot snapshot = {
-        .last_update_id = static_cast<uint64_t>(last_update_id->as_int64()),
+        .last_update_id = *last_update_id,
         .bids = std::move(bids_res.value()),
         .asks = std::move(asks_res.value()),
     };

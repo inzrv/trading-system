@@ -15,17 +15,12 @@ struct IConfig
 
     bool from_string(std::string_view s)
     {
-        const auto parse_to_json_res = parse_to_json(s);
+        const auto parse_to_json_res = parse_to_json_object(s);
         if (!parse_to_json_res) {
             return false;
         }
 
-        boost::json::value json_value = *parse_to_json_res;
-        if (!json_value.is_object()) {
-            return false; 
-        }
-
-        return from_json(json_value.as_object());
+        return from_json(*parse_to_json_res);
     }
 
 protected:
