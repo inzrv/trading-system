@@ -12,13 +12,19 @@
 namespace binance
 {
 
+enum class RuntimeMode
+{
+    LIVE,
+    REPLAY
+};
+
 struct DepthStreamConfig
 {
     bool from_json(const boost::json::object& json);
 
     std::string host;
-    uint16_t port;
-    std::chrono::milliseconds interval;
+    uint16_t port{0};
+    std::chrono::milliseconds interval{0};
 
 private:
     static constexpr std::array<std::chrono::milliseconds, 2> kAllowedIntervals{
@@ -32,8 +38,8 @@ struct OrderbookConfig
     bool from_json(const boost::json::object& json);
 
     std::string host;
-    uint16_t port;
-    uint16_t limit;
+    uint16_t port{0};
+    uint16_t limit{0};
 };
 
 struct RecordingConfig
@@ -45,6 +51,23 @@ struct RecordingConfig
     std::chrono::milliseconds flush_interval{250};
 };
 
+struct ReplayConfig
+{
+    bool from_json(const boost::json::object& json);
+
+    std::string updates_path;
+    std::string snapshots_path;
+};
+
+struct LiveConfig
+{
+    bool from_json(const boost::json::object& json);
+
+    Symbol symbol{Symbol::UNKNOWN};
+    DepthStreamConfig depth_stream_conf;
+    OrderbookConfig orderbook_conf;
+};
+
 struct Config final : public IConfig
 {
     Market market() const noexcept override
@@ -54,10 +77,10 @@ struct Config final : public IConfig
 
     bool from_json(const boost::json::object& json) override;
 
-    Symbol symbol;
-    DepthStreamConfig depth_stream_conf;
-    OrderbookConfig orderbook_conf;
+    RuntimeMode mode{RuntimeMode::LIVE};
+    std::optional<LiveConfig> live_conf;
     std::optional<RecordingConfig> recording_conf;
+    std::optional<ReplayConfig> replay_conf;
 };
 
 } // namespace binance

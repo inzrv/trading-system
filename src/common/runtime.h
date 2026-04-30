@@ -5,7 +5,7 @@
 #include "metrics/reporter.h"
 #include "metrics/registry.h"
 #include "recovery_manager.h"
-#include "recording/market_data_recorder.h"
+#include "replay/market_data_recorder.h"
 #include "sequencer.h"
 #include "queue.h"
 #include "orderbook.h"
@@ -46,7 +46,7 @@ private:
 
     std::unique_ptr<metrics::Registry> m_metrics;
     std::unique_ptr<metrics::Reporter> m_metrics_reporter;
-    std::unique_ptr<recording::MarketDataRecorder> m_market_data_recorder;
+    std::unique_ptr<replay::MarketDataRecorder> m_market_data_recorder;
     std::shared_ptr<IQueue> m_queue;
     std::unique_ptr<IGateway> m_gateway;
     std::unique_ptr<IDecoder> m_decoder;

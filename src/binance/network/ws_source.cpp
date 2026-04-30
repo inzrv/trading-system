@@ -31,7 +31,7 @@ WsSource::WsSource(net::io_context& io_ctx,
                    std::string port,
                    std::string target,
                    metrics::Registry& metrics,
-                   recording::MarketDataRecorder* market_data_recorder,
+                   replay::MarketDataRecorder* market_data_recorder,
                    error_handler_t on_error,
                    state_handler_t on_state,
                    drop_handler_t on_drop)

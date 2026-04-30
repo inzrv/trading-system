@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace recording
+namespace replay
 {
 
 namespace
@@ -54,7 +54,7 @@ MarketDataRecorder::~MarketDataRecorder()
 
 void MarketDataRecorder::record_update(std::string_view source, std::string_view payload)
 {
-    RecordedUpdate record{
+    Update update{
         .received_unix_ms = now_unix_ms(),
         .source = std::string(source),
         .payload = std::string(payload),
@@ -66,8 +66,8 @@ void MarketDataRecorder::record_update(std::string_view source, std::string_view
             return;
         }
 
-        record.update_idx = ++m_last_update_idx;
-        m_queue.push_back(std::move(record));
+        update.update_idx = ++m_last_update_idx;
+        m_queue.push_back(std::move(update));
     }
     m_cv.notify_one();
 }
@@ -82,7 +82,7 @@ void MarketDataRecorder::record_snapshot(uint64_t requested_after_update_idx,
                                          std::string_view source,
                                          std::string_view payload)
 {
-    RecordedSnapshot record{
+    Snapshot snapshot{
         .requested_after_update_idx = requested_after_update_idx,
         .received_unix_ms = now_unix_ms(),
         .source = std::string(source),
@@ -95,15 +95,15 @@ void MarketDataRecorder::record_snapshot(uint64_t requested_after_update_idx,
             return;
         }
 
-        record.available_after_update_idx = m_last_update_idx;
-        m_queue.push_back(std::move(record));
+        snapshot.available_after_update_idx = m_last_update_idx;
+        m_queue.push_back(std::move(snapshot));
     }
     m_cv.notify_one();
 }
 
 void MarketDataRecorder::run()
 {
-    std::deque<RecordedEvent> batch;
+    std::deque<Event> batch;
 
     for (;;) {
         {
@@ -135,12 +135,12 @@ void MarketDataRecorder::run()
     m_snapshots_output.flush();
 }
 
-void MarketDataRecorder::write_batch(std::deque<RecordedEvent>& batch)
+void MarketDataRecorder::write_batch(std::deque<Event>& batch)
 {
     for (const auto& record : batch) {
         std::visit([this](const auto& typed_record) {
             using T = std::decay_t<decltype(typed_record)>;
-            if constexpr (std::is_same_v<T, RecordedUpdate>) {
+            if constexpr (std::is_same_v<T, Update>) {
                 write_update(typed_record);
             } else {
                 write_snapshot(typed_record);
@@ -152,29 +152,29 @@ void MarketDataRecorder::write_batch(std::deque<RecordedEvent>& batch)
     m_snapshots_output.flush();
 }
 
-void MarketDataRecorder::write_update(const RecordedUpdate& record)
+void MarketDataRecorder::write_update(const Update& update)
 {
-    boost::json::object json_record;
-    json_record["type"] = "ws_update";
-    json_record["update_idx"] = record.update_idx;
-    json_record["received_unix_ms"] = record.received_unix_ms;
-    json_record["source"] = record.source;
-    json_record["payload"] = record.payload;
+    boost::json::object json_update;
+    json_update["type"] = "ws_update";
+    json_update["update_idx"] = update.update_idx;
+    json_update["received_unix_ms"] = update.received_unix_ms;
+    json_update["source"] = update.source;
+    json_update["payload"] = update.payload;
 
-    m_updates_output << boost::json::serialize(json_record) << '\n';
+    m_updates_output << boost::json::serialize(json_update) << '\n';
 }
 
-void MarketDataRecorder::write_snapshot(const RecordedSnapshot& record)
+void MarketDataRecorder::write_snapshot(const Snapshot& snapshot)
 {
-    boost::json::object json_record;
-    json_record["type"] = "snapshot";
-    json_record["requested_after_update_idx"] = record.requested_after_update_idx;
-    json_record["available_after_update_idx"] = record.available_after_update_idx;
-    json_record["received_unix_ms"] = record.received_unix_ms;
-    json_record["source"] = record.source;
-    json_record["payload"] = record.payload;
+    boost::json::object json_snapshot;
+    json_snapshot["type"] = "snapshot";
+    json_snapshot["requested_after_update_idx"] = snapshot.requested_after_update_idx;
+    json_snapshot["available_after_update_idx"] = snapshot.available_after_update_idx;
+    json_snapshot["received_unix_ms"] = snapshot.received_unix_ms;
+    json_snapshot["source"] = snapshot.source;
+    json_snapshot["payload"] = snapshot.payload;
 
-    m_snapshots_output << boost::json::serialize(json_record) << '\n';
+    m_snapshots_output << boost::json::serialize(json_snapshot) << '\n';
 }
 
-} // namespace recording
+} // namespace replay

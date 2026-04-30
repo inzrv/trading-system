@@ -4,6 +4,7 @@
 #include "metrics/scoped_latency.h"
 #include "utils/utils.h"
 
+#include <stdexcept>
 #include <thread>
 
 namespace binance
@@ -14,7 +15,7 @@ Gateway::Gateway(Config config,
                  ssl::context& ssl_ctx,
                  std::shared_ptr<IQueue> queue,
                  metrics::Registry& metrics,
-                 recording::MarketDataRecorder* market_data_recorder)
+                 replay::MarketDataRecorder* market_data_recorder)
     : m_config(std::move(config))
     , m_io_ctx(io_ctx)
     , m_ssl_ctx(ssl_ctx)
@@ -22,10 +23,16 @@ Gateway::Gateway(Config config,
     , m_metrics(metrics)
     , m_market_data_recorder(market_data_recorder)
 {
-    const auto depth_stream_host = m_config.depth_stream_conf.host;
-    const auto depth_stream_port = std::to_string(m_config.depth_stream_conf.port);
-    const auto depth_stream_symbol = to_lower(symbol_to_string(m_config.symbol));
-    const auto depth_stream_interval = std::to_string(m_config.depth_stream_conf.interval.count());
+    if (!m_config.live_conf) {
+        throw std::invalid_argument("live gateway requires live config");
+    }
+
+    const auto& live_conf = *m_config.live_conf;
+    const auto& depth_stream_conf = live_conf.depth_stream_conf;
+    const auto depth_stream_host = depth_stream_conf.host;
+    const auto depth_stream_port = std::to_string(depth_stream_conf.port);
+    const auto depth_stream_symbol = to_lower(symbol_to_string(live_conf.symbol));
+    const auto depth_stream_interval = std::to_string(depth_stream_conf.interval.count());
     const auto depth_stream_target = std::format("/ws/{}@depth@{}ms", depth_stream_symbol, depth_stream_interval);
 
     m_ws_source = std::make_unique<WsSource>(
@@ -48,8 +55,9 @@ Gateway::Gateway(Config config,
         }
     );
 
-    const auto orderbook_host = m_config.orderbook_conf.host;
-    const auto orderbook_port = std::to_string(m_config.orderbook_conf.port);
+    const auto& orderbook_conf = live_conf.orderbook_conf;
+    const auto orderbook_host = orderbook_conf.host;
+    const auto orderbook_port = std::to_string(orderbook_conf.port);
 
     m_rest_client = std::make_unique<RestClient>(
         m_io_ctx,
@@ -61,8 +69,9 @@ Gateway::Gateway(Config config,
 
 std::expected<std::string, GatewayError> Gateway::request_snapshot()
 {
-    const auto orderbook_symbol = symbol_to_string(m_config.symbol);
-    const auto orderbook_limit = std::to_string(m_config.orderbook_conf.limit);
+    const auto& live_conf = *m_config.live_conf;
+    const auto orderbook_symbol = symbol_to_string(live_conf.symbol);
+    const auto orderbook_limit = std::to_string(live_conf.orderbook_conf.limit);
     auto last_error = RestError::UNKNOWN_ERROR;
 
     const auto target = std::format("/api/v3/depth?symbol={}&limit={}", orderbook_symbol, orderbook_limit);
@@ -79,7 +88,7 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
         if (res) {
             log::debug("Gateway", "snapshot request succeeded");
             if (m_market_data_recorder) {
-                m_market_data_recorder->record_snapshot(*last_update_idx, m_config.orderbook_conf.host, *res);
+                m_market_data_recorder->record_snapshot(*last_update_idx, live_conf.orderbook_conf.host, *res);
             }
             return *res;
         }

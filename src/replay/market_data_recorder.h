@@ -1,37 +1,17 @@
 #pragma once
 
 #include "common/worker.h"
+#include "market_data.h"
 
 #include <chrono>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <fstream>
-#include <string>
 #include <string_view>
-#include <variant>
 
-namespace recording
+namespace replay
 {
-
-struct RecordedUpdate
-{
-    uint64_t update_idx{0};
-    int64_t received_unix_ms{0};
-    std::string source;
-    std::string payload;
-};
-
-struct RecordedSnapshot
-{
-    uint64_t requested_after_update_idx{0};
-    uint64_t available_after_update_idx{0};
-    int64_t received_unix_ms{0};
-    std::string source;
-    std::string payload;
-};
-
-using RecordedEvent = std::variant<RecordedUpdate, RecordedSnapshot>;
 
 class MarketDataRecorder final : public Worker
 {
@@ -48,9 +28,9 @@ public:
 
 private:
     void run() override;
-    void write_batch(std::deque<RecordedEvent>& batch);
-    void write_update(const RecordedUpdate& record);
-    void write_snapshot(const RecordedSnapshot& record);
+    void write_batch(std::deque<Event>& batch);
+    void write_update(const Update& update);
+    void write_snapshot(const Snapshot& update);
 
 private:
     std::filesystem::path m_updates_path;
@@ -59,8 +39,8 @@ private:
     std::ofstream m_updates_output;
     std::ofstream m_snapshots_output;
 
-    std::deque<RecordedEvent> m_queue;
+    std::deque<Event> m_queue;
     uint64_t m_last_update_idx{0};
 };
 
-} // namespace recording
+} // namespace replay

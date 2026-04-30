@@ -78,7 +78,11 @@ Or from the build without tests:
 
 ## Configuration
 
-The sample `config.json` enables Binance BTCUSDT market data and optional raw recording:
+The sample `config.json` runs in live mode and enables optional raw recording:
+
+```json
+"mode" : "live"
+```
 
 ```json
 "recording" : {
@@ -89,6 +93,19 @@ The sample `config.json` enables Binance BTCUSDT market data and optional raw re
 ```
 
 Remove the `recording` section to run without market data recording.
+
+To replay previously recorded market data, switch to replay mode and point it at the recorded JSONL files:
+
+```json
+"mode" : "replay",
+"market": "binance",
+"replay" : {
+    "updatesPath" : "./data/updates.jsonl",
+    "snapshotsPath" : "./data/snapshots.jsonl"
+}
+```
+
+In replay mode, live-only Binance connection settings such as `depthStream`, `orderbook`, and `symbol` are not required.
 
 ## Data Flow
 
@@ -111,12 +128,12 @@ Those two snapshot indexes are intended for deterministic replay:
 
 - `requested_after_update_idx` is the last recorded WS update when the snapshot request was started.
 - `available_after_update_idx` is the last recorded WS update when the snapshot response was recorded.
-- A future replay gateway can use these barriers to avoid returning a snapshot too early relative to the replayed update stream.
+- The replay gateway uses these barriers to avoid returning a snapshot too early relative to the replayed update stream.
 
 ## Current State and Limitations
 
 - This is an infrastructure prototype, without strategy or execution logic.
-- Market data can be recorded, but file-based replay is not implemented yet.
+- Market data can be recorded and replayed from JSONL files.
 - Metrics exist, but there are no health checks or external metrics export yet.
 - Supports a single source (Binance).
 
@@ -124,5 +141,5 @@ Those two snapshot indexes are intended for deterministic replay:
 
 - Add integration tests for the decoder/sequencer/recovery pipeline.
 - Add normalization into exchange-agnostic events.
-- Implement file-based market data replay from recorded updates/snapshots.
+- Validate replay files before running: contiguous update indexes, monotonic snapshot barriers, and barrier values within the recorded update range.
 - Reduce main-path latency overhead when market data recording is enabled.
