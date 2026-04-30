@@ -15,43 +15,43 @@ ReplayGateway::ReplayGateway(std::shared_ptr<IQueue> queue, MarketData data)
 
 ReplayGateway::~ReplayGateway()
 {
-    stop();
+    close();
 }
 
-void ReplayGateway::start()
+void ReplayGateway::open()
 {
     {
         std::lock_guard lock{m_mutex};
-        if (m_state == State::RUNNING) {
+        if (m_state == State::OPEN) {
             return;
         }
 
-        m_state = State::RUNNING;
+        m_state = State::OPEN;
     }
 
     Worker::start();
     m_cv.notify_all();
 }
 
-void ReplayGateway::stop()
+void ReplayGateway::close()
 {
     {
         std::lock_guard lock{m_mutex};
-        if (m_state == State::STOPPED) {
+        if (m_state == State::CLOSED) {
             return;
         }
 
-        m_state = State::STOPPED;
+        m_state = State::CLOSED;
     }
 
     Worker::stop();
     m_cv.notify_all();
 }
 
-void ReplayGateway::restart()
+void ReplayGateway::reopen()
 {
-    stop();
-    start();
+    close();
+    open();
 }
 
 std::expected<std::string, GatewayError> ReplayGateway::request_snapshot()
@@ -88,14 +88,14 @@ std::expected<std::string, GatewayError> ReplayGateway::request_snapshot()
     return payload;
 }
 
-std::expected<void, GatewayError> ReplayGateway::wait_until_running(std::chrono::milliseconds timeout)
+std::expected<void, GatewayError> ReplayGateway::wait_until_ready(std::chrono::milliseconds timeout)
 {
     std::unique_lock lock{m_mutex};
-    const bool running = m_cv.wait_for(lock, timeout, [this] {
-        return m_state == State::RUNNING || m_state == State::FAILED;
+    const bool ready = m_cv.wait_for(lock, timeout, [this] {
+        return m_state == State::OPEN || m_state == State::FAILED;
     });
 
-    if (!running || m_state != State::RUNNING) {
+    if (!ready || m_state != State::OPEN) {
         return std::unexpected(GatewayError::TIMEOUT);
     }
 

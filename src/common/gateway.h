@@ -11,18 +11,18 @@ class IGateway
 public:
     enum class State
     {
-        STOPPED,
-        RUNNING,
+        CLOSED,
+        OPEN,
         FAILED
     };
 
     virtual ~IGateway() = default;
 
-    virtual void start() = 0;
-    virtual void stop() = 0;
-    virtual void restart() = 0;
+    virtual void open() = 0;
+    virtual void close() = 0;
+    virtual void reopen() = 0;
     virtual std::expected<std::string, GatewayError> request_snapshot() = 0;
-    virtual std::expected<void, GatewayError> wait_until_running(std::chrono::milliseconds timeout) = 0;
+    virtual std::expected<void, GatewayError> wait_until_ready(std::chrono::milliseconds timeout) = 0;
 
     [[nodiscard]] State state() const noexcept
     {
@@ -30,5 +30,5 @@ public:
     }
 
 protected:
-    State m_state{State::STOPPED};
+    State m_state{State::CLOSED};
 };

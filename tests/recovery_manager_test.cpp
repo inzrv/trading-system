@@ -20,11 +20,11 @@ namespace
 class MockGateway : public IGateway
 {
 public:
-    MOCK_METHOD(void, start, (), (override));
-    MOCK_METHOD(void, stop, (), (override));
-    MOCK_METHOD(void, restart, (), (override));
+    MOCK_METHOD(void, open, (), (override));
+    MOCK_METHOD(void, close, (), (override));
+    MOCK_METHOD(void, reopen, (), (override));
     MOCK_METHOD((std::expected<std::string, GatewayError>), request_snapshot, (), (override));
-    MOCK_METHOD((std::expected<void, GatewayError>), wait_until_running, (std::chrono::milliseconds), (override));
+    MOCK_METHOD((std::expected<void, GatewayError>), wait_until_ready, (std::chrono::milliseconds), (override));
 };
 
 class MockDecoder : public IDecoder
@@ -61,8 +61,8 @@ TEST(RecoveryManagerTest, BeginInitializeSuccess)
 
     EXPECT_CALL(orderbook, reset());
     EXPECT_CALL(sequencer, reset());
-    EXPECT_CALL(gateway, start());
-    EXPECT_CALL(gateway, wait_until_running(_)).WillOnce(Return(std::expected<void, GatewayError>{}));
+    EXPECT_CALL(gateway, open());
+    EXPECT_CALL(gateway, wait_until_ready(_)).WillOnce(Return(std::expected<void, GatewayError>{}));
 
     binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
     const auto init_res = recovery_manager.begin_initialize();
@@ -81,8 +81,8 @@ TEST(RecoveryManagerTest, BeginInitializeFails)
 
     EXPECT_CALL(orderbook, reset());
     EXPECT_CALL(sequencer, reset());
-    EXPECT_CALL(gateway, start());
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open());
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::unexpected(GatewayError::TIMEOUT)));
 
     binance::RecoveryManager recovery_manager(gateway, decoder, sequencer, orderbook, metrics);
@@ -102,8 +102,8 @@ TEST(RecoveryManagerTest, TryRecoverLoadsSnapshot)
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
-    EXPECT_CALL(gateway, start()).Times(1);
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open()).Times(1);
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::expected<void, GatewayError>{}));
 
     EXPECT_CALL(gateway, request_snapshot())
@@ -141,8 +141,8 @@ TEST(RecoveryManagerTest, TryRecoverRequestsSnapshotOnce)
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
-    EXPECT_CALL(gateway, start()).Times(1);
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open()).Times(1);
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::expected<void, GatewayError>{}));
 
     EXPECT_CALL(gateway, request_snapshot())
@@ -178,8 +178,8 @@ TEST(RecoveryManagerTest, TryRecoverRequestFails)
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
-    EXPECT_CALL(gateway, start()).Times(1);
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open()).Times(1);
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::expected<void, GatewayError>{}));
 
     EXPECT_CALL(gateway, request_snapshot())
@@ -213,8 +213,8 @@ TEST(RecoveryManagerTest, TryRecoverParseFails)
 
     EXPECT_CALL(orderbook, reset()).Times(1);
     EXPECT_CALL(sequencer, reset()).Times(1);
-    EXPECT_CALL(gateway, start()).Times(1);
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open()).Times(1);
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::expected<void, GatewayError>{}));
 
     EXPECT_CALL(gateway, request_snapshot())
@@ -257,8 +257,8 @@ TEST(RecoveryManagerTest, TryRecover)
 
     EXPECT_CALL(orderbook, reset()).Times(2);
     EXPECT_CALL(sequencer, reset()).Times(2);
-    EXPECT_CALL(gateway, start()).Times(1);
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open()).Times(1);
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::expected<void, GatewayError>{}));
 
     EXPECT_CALL(gateway, request_snapshot())
@@ -307,8 +307,8 @@ TEST(RecoveryManagerTest, TryRecoverSkipsStaleUpdate)
 
     EXPECT_CALL(orderbook, reset()).Times(2);
     EXPECT_CALL(sequencer, reset()).Times(2);
-    EXPECT_CALL(gateway, start()).Times(1);
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open()).Times(1);
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::expected<void, GatewayError>{}));
 
     EXPECT_CALL(gateway, request_snapshot())
@@ -361,8 +361,8 @@ TEST(RecoveryManagerTest, TryRecoverReinitializes)
 
     EXPECT_CALL(orderbook, reset()).Times(3);
     EXPECT_CALL(sequencer, reset()).Times(3);
-    EXPECT_CALL(gateway, start()).Times(2);
-    EXPECT_CALL(gateway, wait_until_running(_)).Times(2)
+    EXPECT_CALL(gateway, open()).Times(2);
+    EXPECT_CALL(gateway, wait_until_ready(_)).Times(2)
         .WillRepeatedly(Return(std::expected<void, GatewayError>{}));
 
     EXPECT_CALL(gateway, request_snapshot())
@@ -405,10 +405,10 @@ TEST(RecoveryManagerTest, StopClearsState)
 
     EXPECT_CALL(orderbook, reset()).Times(2);
     EXPECT_CALL(sequencer, reset()).Times(2);
-    EXPECT_CALL(gateway, start()).Times(1);
-    EXPECT_CALL(gateway, wait_until_running(_))
+    EXPECT_CALL(gateway, open()).Times(1);
+    EXPECT_CALL(gateway, wait_until_ready(_))
         .WillOnce(Return(std::expected<void, GatewayError>{}));
-    EXPECT_CALL(gateway, stop()).Times(1);
+    EXPECT_CALL(gateway, close()).Times(1);
     EXPECT_CALL(gateway, request_snapshot()).Times(0);
     EXPECT_CALL(decoder, decode_snapshot(_)).Times(0);
     EXPECT_CALL(orderbook, initialize(_)).Times(0);

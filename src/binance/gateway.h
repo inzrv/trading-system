@@ -25,11 +25,11 @@ public:
             metrics::Registry& metrics,
             replay::MarketDataRecorder* market_data_recorder = nullptr);
 
-    void start() override;
-    void stop() override;
-    void restart() override;
+    void open() override;
+    void close() override;
+    void reopen() override;
     std::expected<std::string, GatewayError> request_snapshot() override;
-    std::expected<void, GatewayError> wait_until_running(std::chrono::milliseconds timeout) override;
+    std::expected<void, GatewayError> wait_until_ready(std::chrono::milliseconds timeout) override;
 
 private:
     void on_ws_state(WsSource::State state);

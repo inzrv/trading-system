@@ -31,17 +31,17 @@ std::expected<void, RecoveringError> RecoveryManager::begin_initialize()
     m_orderbook.reset();
     m_sequencer.reset();
 
-    m_gateway.start();
+    m_gateway.open();
 
-    const auto wait_res = m_gateway.wait_until_running(kGatewayStartTimeout);
+    const auto wait_res = m_gateway.wait_until_ready(kGatewayStartTimeout);
     if (!wait_res) {
-        log::error("RecoveryManager", "failed to start gateway: {}", error_to_string(wait_res.error()));
+        log::error("RecoveryManager", "failed to open gateway: {}", error_to_string(wait_res.error()));
         m_state = State::STOPPED;
         m_metrics.set_recovering(false);
         return std::unexpected(RecoveringError::GATEWAY_START_ERROR);
     }
 
-    log::info("RecoveryManager", "gateway started");
+    log::info("RecoveryManager", "gateway ready");
     return {};
 }
 
@@ -111,7 +111,7 @@ std::expected<void, RecoveringError> RecoveryManager::try_recover()
 void RecoveryManager::stop()
 {
     log::info("RecoveryManager", "stopping...");
-    m_gateway.stop();
+    m_gateway.close();
     m_buffer.clear();
     m_snapshot.reset();
     m_snapshot_requested = false;

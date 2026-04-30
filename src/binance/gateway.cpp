@@ -117,29 +117,29 @@ std::expected<std::string, GatewayError> Gateway::request_snapshot()
     return std::unexpected(GatewayError::REQUEST_ERROR);
 }
 
-void Gateway::start()
+void Gateway::open()
 {
-    if (m_state == State::RUNNING) {
+    if (m_state == State::OPEN) {
         return;
     }
 
-    log::info("Gateway", "starting...");
+    log::info("Gateway", "opening market data stream...");
     m_ws_source->start();
 }
 
-void Gateway::stop()
+void Gateway::close()
 {
-    if (m_state == State::STOPPED) {
+    if (m_state == State::CLOSED) {
         return;
     }
 
-    log::info("Gateway", "stopping...");
+    log::info("Gateway", "closing market data stream...");
     m_ws_source->stop();
 }
 
-void Gateway::restart()
+void Gateway::reopen()
 {
-    log::info("Gateway", "restart requested");
+    log::info("Gateway", "reopen requested");
     m_ws_source->restart();
 }
 
@@ -149,12 +149,12 @@ void Gateway::on_ws_state(WsSource::State state)
     log::info("Gateway", "websocket state: {}", ws_source_state_to_string(state));
     switch (state) {
         case WsSource::State::STOPPED:
-            m_state = State::STOPPED;
+            m_state = State::CLOSED;
             break;
         case WsSource::State::STARTING:
             break;
         case WsSource::State::RUNNING:
-            m_state = State::RUNNING;
+            m_state = State::OPEN;
             break;
         case WsSource::State::STOPPING:
             break;
@@ -172,11 +172,11 @@ void Gateway::on_ws_error(beast::error_code ec, std::string_view where)
     m_state = State::FAILED;
 }
 
-std::expected<void, GatewayError> Gateway::wait_until_running(std::chrono::milliseconds timeout)
+std::expected<void, GatewayError> Gateway::wait_until_ready(std::chrono::milliseconds timeout)
 {
     std::unique_lock lock{m_state_mutex};
     const bool ok = m_state_cv.wait_for(lock, timeout, [this] {
-        return m_state == State::RUNNING || m_state == State::FAILED;
+        return m_state == State::OPEN || m_state == State::FAILED;
     });
 
     if (!ok) {
