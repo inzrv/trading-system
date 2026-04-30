@@ -1,0 +1,20 @@
+{
+    "mode" : "live",
+    "depthStream" : {
+        "host" : "stream.binance.com",
+        "port" : 9443,
+        "interval" : 100
+    },
+    "orderbook" : {
+        "host" : "api.binance.com",
+        "port" : 443,
+        "limit" : 5000
+    },
+    "recording" : {
+        "updatesPath" : "updates.jsonl",
+        "snapshotsPath" : "snapshots.jsonl",
+        "flushIntervalMs" : 250
+    },
+    "market": "binance",
+    "symbol" : "BTCUSDT"
+}

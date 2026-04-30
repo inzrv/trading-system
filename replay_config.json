@@ -1,0 +1,8 @@
+{
+    "mode" : "replay",
+    "market": "binance",
+    "replay" : {
+        "updatesPath" : "updates.jsonl",
+        "snapshotsPath" : "snapshots.jsonl"
+    }
+}

@@ -67,41 +67,49 @@ Direct run:
 ## Run Project With Config
 
 ```bash
-./build/src/trading_system ./config.json
+./build/src/trading_system ./live_config.json
 ```
 
 Or from the build without tests:
 
 ```bash
-./build-no-tests/src/trading_system ./config.json
+./build-no-tests/src/trading_system ./live_config.json
+```
+
+To run replay mode:
+
+```bash
+./build/src/trading_system ./replay_config.json
 ```
 
 ## Configuration
 
-The sample `config.json` runs in live mode and enables optional raw recording:
+The repository includes two sample configs:
 
-```json
-"mode" : "live"
-```
+- `live_config.json` runs against Binance live market data.
+- `replay_config.json` replays previously recorded JSONL market data.
+
+The sample `live_config.json` enables optional raw recording:
 
 ```json
 "recording" : {
-    "updatesPath" : "./data/updates.jsonl",
-    "snapshotsPath" : "./data/snapshots.jsonl",
+    "updatesPath" : "updates.jsonl",
+    "snapshotsPath" : "snapshots.jsonl",
     "flushIntervalMs" : 250
 }
 ```
 
 Remove the `recording` section to run without market data recording.
+Recording is only supported in live mode; replay configs with a `recording` section are rejected during config parsing.
 
-To replay previously recorded market data, switch to replay mode and point it at the recorded JSONL files:
+To replay previously recorded market data, use `replay_config.json` and point it at the recorded JSONL files:
 
 ```json
 "mode" : "replay",
 "market": "binance",
 "replay" : {
-    "updatesPath" : "./data/updates.jsonl",
-    "snapshotsPath" : "./data/snapshots.jsonl"
+    "updatesPath" : "updates.jsonl",
+    "snapshotsPath" : "snapshots.jsonl"
 }
 ```
 
@@ -133,7 +141,7 @@ Those two snapshot indexes are intended for deterministic replay:
 ## Current State and Limitations
 
 - This is an infrastructure prototype, without strategy or execution logic.
-- Market data can be recorded and replayed from JSONL files.
+- Market data can be recorded in live mode and replayed from JSONL files.
 - Metrics exist, but there are no health checks or external metrics export yet.
 - Supports a single source (Binance).
 
